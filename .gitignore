@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+data/
+local/
+web/public/models/*.vrm
+*.log

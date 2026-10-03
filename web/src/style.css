@@ -1,0 +1,318 @@
+:root {
+  color-scheme: dark;
+  --bg: #12141a;
+  --panel: #1b1e27;
+  --panel-2: #232735;
+  --border: #2e3344;
+  --text: #e8eaf0;
+  --muted: #9aa1b5;
+  --accent: #7aa2ff;
+  --listening: #4fd18b;
+  --thinking: #f2c14e;
+  --speaking: #7aa2ff;
+  --error: #ff7a7a;
+  --radius: 12px;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 15px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button,
+select,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: var(--accent);
+  color: #0d1020;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+select,
+input[type="text"] {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+
+kbd {
+  font: inherit;
+  font-size: 0.8em;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  opacity: 0.7;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.topbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.notice {
+  margin: 10px 16px 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #3a2a14;
+  border: 1px solid #6b4a1a;
+  color: #ffd79a;
+}
+
+.layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr minmax(320px, 440px);
+  gap: 16px;
+  padding: 16px;
+}
+
+/* Stage: placeholder orb until the 3D avatar arrives in phase c. */
+.stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 50% 40%, #1f2433, var(--bg) 70%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  min-height: 240px;
+  --state-color: var(--muted);
+}
+
+.stage[data-state="listening"] {
+  --state-color: var(--listening);
+}
+.stage[data-state="thinking"] {
+  --state-color: var(--thinking);
+}
+.stage[data-state="speaking"] {
+  --state-color: var(--speaking);
+}
+
+.orb {
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff8, transparent 40%), var(--state-color);
+  box-shadow: 0 0 60px var(--state-color);
+  opacity: 0.85;
+  transition: background-color 0.3s, box-shadow 0.3s;
+}
+
+.stage[data-state="listening"] .orb {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.stage[data-state="thinking"] .orb {
+  animation: pulse 2s ease-in-out infinite;
+}
+.stage[data-state="speaking"] .orb {
+  animation: pulse 0.45s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.msg .who {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+
+.msg .body {
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.msg.user {
+  align-self: flex-end;
+  max-width: 85%;
+}
+
+.msg.user .who {
+  text-align: right;
+}
+
+.msg.user .body {
+  background: #2b3550;
+}
+
+.msg.assistant {
+  align-self: flex-start;
+  max-width: 90%;
+}
+
+.msg .body.pending::after {
+  content: "…";
+  color: var(--muted);
+  animation: blink 1s steps(2) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.remark {
+  margin-left: 0.3em;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.remark.error {
+  display: block;
+  margin-left: 0;
+  color: var(--error);
+  font-style: normal;
+}
+
+.interim {
+  min-height: 1.6em;
+  padding: 0 14px;
+  color: var(--listening);
+  font-style: italic;
+}
+
+.input-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.ptt {
+  padding: 14px;
+  font-size: 1.05rem;
+  user-select: none;
+  touch-action: none;
+}
+
+.ptt.active {
+  background: var(--listening);
+}
+
+.text-form {
+  display: flex;
+  gap: 8px;
+}
+
+.text-form input {
+  flex: 1;
+  min-width: 0;
+}
+
+.statusbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.status[data-state="listening"] {
+  color: var(--listening);
+}
+.status[data-state="thinking"] {
+  color: var(--thinking);
+}
+.status[data-state="speaking"] {
+  color: var(--speaking);
+}
+
+.debug {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: 220px 1fr;
+  }
+}

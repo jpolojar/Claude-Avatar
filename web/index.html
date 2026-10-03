@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="fi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Avatar</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <h1>Avatar</h1>
+        <div class="topbar-controls">
+          <label class="field">
+            <span>Kieli</span>
+            <select id="lang">
+              <option value="fi">Suomi</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+          <button id="new-chat" type="button" class="secondary">Uusi keskustelu</button>
+        </div>
+      </header>
+
+      <div id="notice" class="notice" hidden></div>
+
+      <main class="layout">
+        <section id="stage" class="stage" data-state="idle">
+          <div class="orb" aria-hidden="true"></div>
+        </section>
+
+        <section class="chat">
+          <div id="log" class="log" aria-live="polite"></div>
+          <div id="interim" class="interim"></div>
+          <div class="input-row">
+            <button id="ptt" type="button" class="ptt">
+              Pidä pohjassa ja puhu <kbd>välilyönti</kbd>
+            </button>
+            <form id="text-form" class="text-form" autocomplete="off">
+              <input id="text-input" type="text" placeholder="…tai kirjoita viesti" />
+              <button type="submit">Lähetä</button>
+            </form>
+          </div>
+          <footer class="statusbar">
+            <span id="status" class="status">Valmis</span>
+            <span id="debug" class="debug"></span>
+          </footer>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
