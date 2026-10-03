@@ -2,6 +2,7 @@ import express from "express";
 import { isLang, isServerTtsEngine, type ChatEvent, type HealthResponse } from "../shared/protocol.js";
 import { classifyError, streamReply } from "./claude.js";
 import { config } from "./config.js";
+import { SentenceSplitter } from "./sentences.js";
 import { getSession } from "./session.js";
 import { MAX_TTS_CHARS, isKnownVoice, listVoices, synthesize } from "./tts/index.js";
 
@@ -42,15 +43,36 @@ app.post("/api/chat", async (req, res) => {
     if (!res.writableFinished) abort.abort();
   });
 
+  // Complete sentences go out as soon as they are certain, so the browser can
+  // start synthesizing speech while Claude is still writing.
+  const started = performance.now();
+  let firstSentenceMs: number | null = null;
+  let splitter = new SentenceSplitter();
+  let sentenceIndex = 0;
+  const sendSentences = (chunks: string[]) => {
+    for (const chunk of chunks) {
+      firstSentenceMs ??= performance.now() - started;
+      send({ type: "sentence", index: sentenceIndex++, text: chunk });
+    }
+  };
+
   try {
     const result = await streamReply(session, abort.signal, {
-      onText: (delta) => send({ type: "delta", text: delta }),
-      onReset: () => send({ type: "reset" }),
+      onText: (delta) => {
+        send({ type: "delta", text: delta });
+        sendSentences(splitter.push(delta));
+      },
+      onReset: () => {
+        splitter = new SentenceSplitter();
+        sentenceIndex = 0;
+        send({ type: "reset" });
+      },
       onLanguage: (newLang) => {
         session.adoptLanguage(newLang);
         send({ type: "lang", lang: newLang });
       },
     });
+    if (!result.aborted) sendSentences(splitter.flush());
 
     // A refused reply (after any fallback) is dropped along with its prompt;
     // an interrupted one is kept up to the point it got to.
@@ -60,7 +82,7 @@ app.post("/api/chat", async (req, res) => {
     const u = result.usage;
     console.log(
       `[chat] ${session.language} · ${result.aborted ? "aborted" : result.stopReason}` +
-        ` · TTFT ${fmtMs(result.ttftMs)} · total ${fmtMs(result.totalMs)}` +
+        ` · TTFT ${fmtMs(result.ttftMs)} · 1st sentence ${fmtMs(firstSentenceMs)} · total ${fmtMs(result.totalMs)}` +
         (u ? ` · in ${u.inputTokens} (cache read ${u.cacheReadTokens}, write ${u.cacheWriteTokens}) out ${u.outputTokens}` : "") +
         ` · ${result.model}`,
     );

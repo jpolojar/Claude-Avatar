@@ -11,7 +11,7 @@ Toteutussuunnitelma vaiheineen on tiedostossa `C:\Users\jpolo\.claude\plans\drea
 | a | Mikki → teksti → Claude → teksti ruudulle | ✅ valmis |
 | b | Clauden vastaus puheeksi (edge-tts Noora, varalla selaimen ääni) | ✅ valmis |
 | c | 3D-avatar (VRM) ja huulisynkka | ✅ valmis |
-| d | Streaming ja lausepätkitys | – |
+| d | Streaming ja lausepätkitys | ✅ valmis |
 | e | Barge-in, aina päällä -tila, muisti ja viimeistely | – |
 
 ## Käyttöönotto
@@ -35,7 +35,17 @@ Tarvitset Node.js 22.9:n tai uudemman (Node 24 on testattu) sekä Microsoft Edge
 - **Keskeytys:** välilyönnin painaminen kesken vastauksen katkaisee sen. Claude näkee seuraavalla vuorolla, että se keskeytettiin.
 - **Kieli:** valinta vaihtaa puheentunnistuksen ja Clauden vastauskielen. Vaihto astuu voimaan seuraavasta vuorosta.
 - **Uusi keskustelu** tyhjentää historian.
-- **Tilarivi** näyttää viiveet: puheentunnistus, ensimmäinen sana, kokonaisaika ja tokenimäärät.
+- **Tilarivi** näyttää viiveet mitattuna siitä, kun viesti lähti: puheentunnistus (STT), Clauden ensimmäinen sana, ensimmäinen valmis lause, äänen alku (sekä ensimmäisen lauseen synteesiaika) ja tokenimäärät.
+
+### Miten viive pidetään pienenä
+
+Palvelin pilkkoo Clauden vastauksen lauseiksi heti, kun lause on valmis (`server/sentences.ts`). Selain syntetisoi ensimmäisen lauseen samalla, kun Claude vielä kirjoittaa, ja seuraavan lauseen sillä aikaa, kun edellinen soi (`web/src/tts/queue.ts`).
+
+- **Lauseraja:** lyhenteet (esim., mm., klo, Dr. …), nimikirjaimet, päivämäärät ja järjestysluvut eivät katkaise lausetta.
+- **Pitkät lauseet:** pitkä lause katkaistaan pilkun kohdalta, ensimmäinen jo noin 80 merkin jälkeen.
+- **Hiljaisuuden leikkaus:** Edgen äänitiedostojen alku- ja loppuhiljaisuus leikataan pois, ja lauseiden väliin jätetään noin 0,2 sekunnin tauko.
+
+Mockilla mitattuna (ensimmäinen sana 1,2 s) ääni alkaa noin 1,7 sekunnissa, kun aiemmin se alkoi vasta, kun koko vastaus oli valmis ja syntetisoitu.
 
 ## Avatar
 
@@ -100,6 +110,6 @@ npm test            # yksikkötestit
 
 Rakenne:
 
-- `server/`: Express-palvelin. Tiedosto `claude.ts` hoitaa Claude-streamauksen, `session.ts` keskusteluhistorian ja `persona.md` persoonan. Kansiossa `tts/` ovat puhesynteesimoottorit (edge, piper).
+- `server/`: Express-palvelin. Tiedosto `claude.ts` hoitaa Claude-streamauksen, `sentences.ts` lausepilkkojan, `language-marker.ts` kielenvaihtomerkinnät, `session.ts` keskusteluhistorian ja `persona.md` persoonan. Kansiossa `tts/` ovat puhesynteesimoottorit (edge, piper).
 - `web/`: Vite- ja TypeScript-käyttöliittymä. Tiedosto `app.ts` sisältää tilakoneen, `stt/` puheentunnistuksen, `tts/` puhemoottorit ja varaäänilogiikan, `audio/` Web Audio -ketjun, huulisynkan ja kaikutestin, `avatar/` 3D-avatarin ja sen liikkeet sekä `ui/` näkymät. Kehitystilassa avatar on konsolissa muuttujana `avatar`, esimerkiksi `avatar.setState("thinking")`.
 - `shared/protocol.ts`: palvelimen ja selaimen yhteinen viestimuoto (NDJSON).

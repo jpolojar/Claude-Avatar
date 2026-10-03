@@ -3,6 +3,7 @@ import { isAbortError, streamChat } from "./api";
 import type { Settings } from "./settings";
 import { WebSpeechStt } from "./stt/webspeech";
 import type { Clip } from "./tts/engine";
+import { SpeechQueue } from "./tts/queue";
 import type { Speaker } from "./tts/speaker";
 import type { ChatLog } from "./ui/chat-log";
 import { strings } from "./ui/strings";
@@ -28,6 +29,7 @@ type DoneEvent = Extract<ChatEvent, { type: "done" }>;
 interface TurnTimings {
   sttMs: number | null;
   firstTextMs: number | null;
+  firstSentenceMs: number | null;
   audioStartMs: number | null;
   ttsMs: number | null;
   engine: TtsEngineId | null;
@@ -158,25 +160,59 @@ export class App {
     const timings: TurnTimings = {
       sttMs,
       firstTextMs: null,
+      firstSentenceMs: null,
       audioStartMs: null,
       ttsMs: null,
       engine: null,
       done: null,
     };
     const showTimings = () => this.view.setDebug(formatDebug(timings));
-    let reply = "";
-    let failed = false;
+
+    // Sentences are spoken as they arrive. A fallback reset or a refusal
+    // replaces whatever is queued, so speech gets its own chained abort signal.
+    let ttsErrorShown = false;
+    const startSpeech = () => {
+      const speech = new AbortController();
+      controller.signal.addEventListener("abort", () => speech.abort(), { once: true });
+      const queue = new SpeechQueue((sentence, signal) => this.speaker.prepare(sentence, lang, signal), speech.signal, {
+        onClipStart: (clip) => {
+          if (timings.audioStartMs === null) {
+            timings.audioStartMs = performance.now() - sentAt;
+            timings.ttsMs = clip.prepareMs;
+            timings.engine = clip.engine;
+            showTimings();
+          }
+          if (this.current === controller) this.setState("speaking");
+          this.view.setSpeaking(clip.engine);
+        },
+        onClipEnd: () => this.view.setSpeaking(null),
+        onError: () => {
+          if (ttsErrorShown) return;
+          ttsErrorShown = true;
+          this.view.showNotice(strings.ttsFailed);
+        },
+      });
+      return { queue, stop: () => speech.abort() };
+    };
+    let speech = startSpeech();
+    const restartSpeech = () => {
+      speech.stop();
+      speech = startSpeech();
+    };
 
     const onEvent = (event: ChatEvent) => {
       switch (event.type) {
         case "delta":
           timings.firstTextMs ??= performance.now() - sentAt;
-          reply += event.text;
           bubble.append(event.text);
           break;
+        case "sentence":
+          timings.firstSentenceMs ??= performance.now() - sentAt;
+          speech.queue.push(event.text);
+          break;
         case "reset":
-          reply = "";
           bubble.set("");
+          restartSpeech();
           break;
         case "lang":
           // Speak this reply, and listen from now on, in the new language.
@@ -186,15 +222,15 @@ export class App {
         case "done":
           timings.done = event;
           if (event.stopReason === "refusal") {
-            reply = strings.refusalSpoken[lang];
             bubble.set(strings.refusal);
+            restartSpeech();
+            speech.queue.push(strings.refusalSpoken[lang]);
           } else if (event.stopReason === "max_tokens") {
             bubble.note(strings.truncated);
           }
           showTimings();
           break;
         case "error":
-          failed = true;
           bubble.error(strings.chatErrors[event.code]);
           break;
       }
@@ -202,17 +238,11 @@ export class App {
 
     try {
       await streamChat({ sessionId: this.sessionId, text, lang }, onEvent, controller.signal);
-      // Phase b: the whole reply is spoken once it is complete.
-      if (!failed && reply.trim()) {
-        await this.speak(reply, lang, controller, (clip) => {
-          timings.audioStartMs = performance.now() - sentAt;
-          timings.ttsMs = clip.prepareMs;
-          timings.engine = clip.engine;
-          showTimings();
-        });
-      }
+      speech.queue.close();
+      await speech.queue.done;
       if (controller.signal.aborted) bubble.note(strings.interrupted);
     } catch (err) {
+      speech.stop();
       if (isAbortError(err)) bubble.note(strings.interrupted);
       else bubble.error(strings.serverDown);
     } finally {
@@ -259,6 +289,7 @@ function formatDebug(t: TurnTimings): string {
   const parts = [
     t.sttMs !== null ? `${d.stt} ${ms(t.sttMs)}` : null,
     `${d.firstWord} ${ms(t.firstTextMs)}`,
+    t.firstSentenceMs !== null ? `${d.firstSentence} ${ms(t.firstSentenceMs)}` : null,
     t.audioStartMs !== null ? `${d.audioStart} ${ms(t.audioStartMs)} (${d.tts} ${ms(t.ttsMs)}, ${t.engine})` : null,
     usage ? `${d.tokens} ${usage.inputTokens}→${usage.outputTokens} · ${d.cache} ${usage.cacheReadTokens}` : null,
     t.done?.model ?? null,

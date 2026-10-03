@@ -30,6 +30,8 @@ export type ChatEvent =
   | { type: "reset" }
   // Claude switched the conversation language (the user asked for it by voice).
   | { type: "lang"; lang: Lang }
+  // A complete, speakable chunk of the reply (also contained in the deltas).
+  | { type: "sentence"; index: number; text: string }
   | {
       type: "done";
       stopReason: string | null;

@@ -3,6 +3,30 @@ import { getAudio } from "../audio/context";
 import type { Clip, PrepareOptions, TtsEngine } from "./engine";
 
 const FADE_OUT_S = 0.06;
+// Edge pads every clip with ~0.1 s of leading and up to ~0.9 s of trailing
+// silence, which makes the pauses between streamed sentences drag.
+const SILENCE_THRESHOLD = 10 ** (-50 / 20); // -50 dBFS
+const KEEP_LEAD_S = 0.02;
+const KEEP_TAIL_S = 0.18; // a natural pause between sentences
+
+/** Cuts leading and trailing silence; returns how much was cut from the start. */
+function trimSilence(ctx: BaseAudioContext, buffer: AudioBuffer): { buffer: AudioBuffer; cutMs: number } {
+  const data = buffer.getChannelData(0);
+  let first = 0;
+  while (first < data.length && Math.abs(data[first]!) < SILENCE_THRESHOLD) first++;
+  let last = data.length - 1;
+  while (last > first && Math.abs(data[last]!) < SILENCE_THRESHOLD) last--;
+  if (first >= last) return { buffer, cutMs: 0 };
+
+  const rate = buffer.sampleRate;
+  const start = Math.max(0, first - Math.round(KEEP_LEAD_S * rate));
+  const end = Math.min(data.length, last + Math.round(KEEP_TAIL_S * rate));
+  const trimmed = ctx.createBuffer(buffer.numberOfChannels, end - start, rate);
+  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+    trimmed.copyToChannel(buffer.getChannelData(channel).subarray(start, end), channel);
+  }
+  return { buffer: trimmed, cutMs: (start / rate) * 1000 };
+}
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
   const binary = atob(base64);
@@ -27,8 +51,10 @@ export class ServerTts implements TtsEngine {
     });
     if (!res.ok) throw new Error(`TTS HTTP ${res.status}`);
     const body = (await res.json()) as TtsResponse;
-    const buffer = await getAudio().ctx.decodeAudioData(base64ToArrayBuffer(body.audio));
-    return new BufferClip(this.id, voice, buffer, body.words, performance.now() - started);
+    const { ctx } = getAudio();
+    const { buffer, cutMs } = trimSilence(ctx, await ctx.decodeAudioData(base64ToArrayBuffer(body.audio)));
+    const words = body.words.map((w) => ({ ...w, offsetMs: Math.max(0, w.offsetMs - cutMs) }));
+    return new BufferClip(this.id, voice, buffer, words, performance.now() - started);
   }
 }
 

@@ -86,6 +86,7 @@ export const strings = {
   debug: {
     stt: "STT",
     firstWord: "ensimmäinen sana",
+    firstSentence: "1. lause",
     audioStart: "ääni alkoi",
     tts: "TTS",
     tokens: "tokenit",
