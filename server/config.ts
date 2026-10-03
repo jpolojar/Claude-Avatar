@@ -18,4 +18,11 @@ export const config = {
   maxTokens: 4096,
   // Optional offline voice: python -m piper.http_server (see README).
   piperUrl: (process.env.AVATAR_PIPER_URL || "http://127.0.0.1:5000").replace(/\/+$/, ""),
+  // Where memory.json lives (tests point this elsewhere so they never touch real memory).
+  dataDir: process.env.AVATAR_DATA_DIR || "data",
+  // Local speech recognition for always-on listening (scripts/whisper.mjs starts it).
+  whisperUrl: (process.env.AVATAR_WHISPER_URL || `http://127.0.0.1:${process.env.AVATAR_WHISPER_PORT || 8178}`).replace(
+    /\/+$/,
+    "",
+  ),
 };

@@ -1,6 +1,6 @@
 import type { ServerTtsEngine, TtsRequest, TtsResponse, WordTiming } from "../../../shared/protocol";
 import { getAudio } from "../audio/context";
-import type { Clip, PrepareOptions, TtsEngine } from "./engine";
+import { spokenPrefix, type Clip, type PlayResult, type PrepareOptions, type TtsEngine } from "./engine";
 
 const FADE_OUT_S = 0.06;
 // Edge pads every clip with ~0.1 s of leading and up to ~0.9 s of trailing
@@ -54,7 +54,7 @@ export class ServerTts implements TtsEngine {
     const { ctx } = getAudio();
     const { buffer, cutMs } = trimSilence(ctx, await ctx.decodeAudioData(base64ToArrayBuffer(body.audio)));
     const words = body.words.map((w) => ({ ...w, offsetMs: Math.max(0, w.offsetMs - cutMs) }));
-    return new BufferClip(this.id, voice, buffer, words, performance.now() - started);
+    return new BufferClip(this.id, voice, text, buffer, words, performance.now() - started);
   }
 }
 
@@ -62,15 +62,18 @@ class BufferClip implements Clip {
   constructor(
     readonly engine: ServerTtsEngine,
     readonly voice: string,
+    readonly text: string,
     private readonly buffer: AudioBuffer,
     readonly words: readonly WordTiming[],
     readonly prepareMs: number,
   ) {}
 
-  play(signal: AbortSignal): Promise<void> {
+  play(signal: AbortSignal): Promise<PlayResult> {
     return new Promise((resolve) => {
-      if (signal.aborted) return resolve();
+      if (signal.aborted) return resolve({ completed: false, spokenText: "" });
       const { ctx, output } = getAudio();
+      const startedAt = ctx.currentTime;
+      let stoppedAt: number | null = null;
       const source = ctx.createBufferSource();
       source.buffer = this.buffer;
       const gain = ctx.createGain();
@@ -78,6 +81,7 @@ class BufferClip implements Clip {
 
       const onAbort = () => {
         const now = ctx.currentTime;
+        stoppedAt = now;
         gain.gain.setValueAtTime(gain.gain.value, now);
         gain.gain.linearRampToValueAtTime(0, now + FADE_OUT_S);
         source.stop(now + FADE_OUT_S);
@@ -86,7 +90,12 @@ class BufferClip implements Clip {
         signal.removeEventListener("abort", onAbort);
         source.disconnect();
         gain.disconnect();
-        resolve();
+        if (stoppedAt === null) return resolve({ completed: true, spokenText: this.text });
+        const playedMs = (stoppedAt - startedAt) * 1000;
+        resolve({
+          completed: false,
+          spokenText: spokenPrefix(this.text, this.words, playedMs, this.buffer.duration * 1000),
+        });
       };
       signal.addEventListener("abort", onAbort, { once: true });
       source.start();

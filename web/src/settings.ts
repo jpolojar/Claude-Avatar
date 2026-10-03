@@ -1,8 +1,12 @@
 import { isLang, type Lang, type TtsEngineId, type VoiceOption } from "../../shared/protocol";
 import { browserVoices } from "./tts/browser-tts";
 
+/** Push-to-talk (Web Speech) or always-on listening (VAD + local Whisper). */
+export type ListenMode = "ptt" | "always";
+
 export interface Settings {
   lang: Lang;
+  listenMode: ListenMode;
   engine: TtsEngineId;
   /** Speaking rate change in percent. */
   rate: number;
@@ -13,13 +17,14 @@ export interface Settings {
 const KEY = "avatar.settings";
 const ENGINES: readonly TtsEngineId[] = ["edge", "piper", "browser"];
 
-const DEFAULTS: Settings = { lang: "fi", engine: "edge", rate: 0, voices: {} };
+const DEFAULTS: Settings = { lang: "fi", listenMode: "ptt", engine: "edge", rate: 0, voices: {} };
 
 export function loadSettings(): Settings {
   try {
     const stored = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<Settings>;
     return {
       lang: isLang(stored.lang) ? stored.lang : DEFAULTS.lang,
+      listenMode: stored.listenMode === "always" ? "always" : "ptt",
       engine: ENGINES.find((e) => e === stored.engine) ?? DEFAULTS.engine,
       rate: typeof stored.rate === "number" ? stored.rate : DEFAULTS.rate,
       voices: typeof stored.voices === "object" && stored.voices ? stored.voices : {},

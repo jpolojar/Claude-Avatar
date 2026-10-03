@@ -1,4 +1,45 @@
-import type { ChatEvent, ChatRequest, HealthResponse, VoiceOption } from "../../shared/protocol";
+import type {
+  ChatEvent,
+  ChatRequest,
+  HealthResponse,
+  Lang,
+  MemoryResponse,
+  SttResponse,
+  VoiceOption,
+} from "../../shared/protocol";
+
+/** Sends an utterance (WAV) to the local Whisper server through the Node server. */
+export async function transcribe(wav: ArrayBuffer, lang: Lang): Promise<SttResponse> {
+  const res = await fetch(`/api/stt?lang=${lang}`, {
+    method: "POST",
+    headers: { "Content-Type": "audio/wav" },
+    body: wav,
+  });
+  if (!res.ok) throw new Error(`STT HTTP ${res.status}`);
+  return (await res.json()) as SttResponse;
+}
+
+/** Lets the server fold the conversation into memory; survives page unload. */
+export function endSession(sessionId: string): void {
+  void fetch("/api/session/end", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionId }),
+    keepalive: true,
+  }).catch(() => {});
+}
+
+export async function fetchMemory(): Promise<MemoryResponse> {
+  const res = await fetch("/api/memory");
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()) as MemoryResponse;
+}
+
+export async function clearMemory(): Promise<MemoryResponse> {
+  const res = await fetch("/api/memory", { method: "DELETE" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()) as MemoryResponse;
+}
 
 export async function fetchHealth(): Promise<HealthResponse | null> {
   try {

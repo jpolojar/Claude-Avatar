@@ -7,6 +7,7 @@ export interface AssistantBubble {
   /** Adds a muted remark after the text, e.g. "(keskeytetty)". */
   note(text: string): void;
   error(text: string): void;
+  remove(): void;
 }
 
 export class ChatLog {
@@ -16,8 +17,11 @@ export class ChatLog {
     this.el.replaceChildren();
   }
 
-  addUser(text: string): void {
-    this.add("user", strings.you).textContent = text;
+  /** Returns a function that removes the message again. */
+  addUser(text: string): () => void {
+    const body = this.add("user", strings.you);
+    body.textContent = text;
+    return () => body.parentElement?.remove();
   }
 
   addAssistant(): AssistantBubble {
@@ -44,6 +48,7 @@ export class ChatLog {
       set: (text) => update(() => (textEl.textContent = text)),
       note: (text) => update(() => addRemark("remark", text)),
       error: (text) => update(() => addRemark("remark error", text)),
+      remove: () => body.parentElement?.remove(),
     };
   }
 

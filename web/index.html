@@ -12,6 +12,13 @@
         <h1>Avatar</h1>
         <div class="topbar-controls">
           <label class="field">
+            <span>Puhetapa</span>
+            <select id="listen-mode">
+              <option value="ptt"></option>
+              <option value="always"></option>
+            </select>
+          </label>
+          <label class="field">
             <span>Kieli</span>
             <select id="lang">
               <option value="fi">Suomi</option>
@@ -47,6 +54,19 @@
             <button id="echo-test" type="button" class="secondary">Kaikutesti</button>
           </div>
           <p id="echo-result" class="echo-result"></p>
+        </div>
+      </details>
+
+      <details id="memory-panel" class="settings">
+        <summary>Muisti</summary>
+        <div class="settings-body">
+          <div class="memory">
+            <pre id="memory-text" class="memory-text"></pre>
+            <p id="memory-updated" class="memory-updated"></p>
+          </div>
+          <div class="field">
+            <button id="memory-clear" type="button" class="secondary">Tyhjennä muisti</button>
+          </div>
         </div>
       </details>
 

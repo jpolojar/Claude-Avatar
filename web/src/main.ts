@@ -4,12 +4,13 @@ import { App } from "./app";
 import { unlockAudio } from "./audio/context";
 import { Avatar } from "./avatar/avatar";
 import { runEchoTest } from "./audio/echo-test";
-import { loadSettings, saveSettings, setServerVoices, type Settings } from "./settings";
+import { loadSettings, saveSettings, setServerVoices, type ListenMode, type Settings } from "./settings";
 import { WebSpeechStt } from "./stt/webspeech";
 import { waitForBrowserVoices } from "./tts/browser-tts";
 import { Speaker } from "./tts/speaker";
 import { ChatLog } from "./ui/chat-log";
 import { byId } from "./ui/dom";
+import { bindMemoryPanel } from "./ui/memory-panel";
 import { bindSettingsPanel } from "./ui/settings-panel";
 import { strings } from "./ui/strings";
 
@@ -63,7 +64,8 @@ const app = new App(
       avatar.setState(state);
       stage.dataset.state = state;
       statusEl.dataset.state = state;
-      statusEl.textContent = strings.status[state];
+      statusEl.textContent =
+        state === "idle" && settings.listenMode === "always" ? strings.idleAlwaysOn : strings.status[state];
       pttButton.classList.toggle("active", state === "listening");
     },
     setInterim: (text) => {
@@ -94,7 +96,9 @@ const settingsPanel = bindSettingsPanel({
     app.stop();
     const lang = settings.lang;
     const clip = await speaker.prepare(strings.echo.sample[lang], lang, new AbortController().signal);
-    const result = await runEchoTest((signal) => clip.play(signal));
+    const result = await runEchoTest(async (signal) => {
+      await clip.play(signal);
+    });
     return strings.echo.describe(result, clip.engine);
   },
 });
@@ -113,9 +117,56 @@ newChatButton.addEventListener("click", () => {
   newChatButton.blur();
 });
 
-// Browsers only allow audio after a user gesture; create the AudioContext on the first one.
-window.addEventListener("pointerdown", unlockAudio, { capture: true });
-window.addEventListener("keydown", unlockAudio, { capture: true });
+// Fold the conversation into memory when the page goes away.
+window.addEventListener("pagehide", () => app.endConversation());
+
+bindMemoryPanel();
+
+// --- Listening mode -----------------------------------------------------------
+
+const listenSelect = byId<HTMLSelectElement>("listen-mode");
+let whisperAvailable = true; // until /api/health says otherwise
+const renderListenMode = () => {
+  const [ptt, always] = listenSelect.options;
+  if (ptt) ptt.textContent = strings.listenModes.ptt;
+  if (always) {
+    always.textContent = whisperAvailable ? strings.listenModes.always : strings.listenModes.alwaysUnavailable;
+    always.disabled = !whisperAvailable;
+  }
+  listenSelect.value = settings.listenMode;
+  pttButton.firstChild!.textContent = `${settings.listenMode === "always" ? strings.stopLabel : strings.pttLabel} `;
+};
+
+const applyListenMode = async (mode: ListenMode) => {
+  updateSettings({ listenMode: mode });
+  try {
+    await app.setListenMode(mode);
+  } catch (err) {
+    console.warn("Always-on listening failed to start", err);
+    showNotice(strings.micFailed(err instanceof Error ? err.message : String(err)));
+    updateSettings({ listenMode: "ptt" });
+    await app.setListenMode("ptt");
+  }
+  renderListenMode();
+};
+
+listenSelect.addEventListener("change", () => {
+  void applyListenMode(listenSelect.value === "always" ? "always" : "ptt");
+  listenSelect.blur();
+});
+
+// Browsers only allow audio after a user gesture; create the AudioContext on
+// the first one, and only then resume always-on listening from a saved setting.
+let resumeAlwaysOn = settings.listenMode === "always";
+const onFirstGesture = () => {
+  unlockAudio();
+  if (resumeAlwaysOn) {
+    resumeAlwaysOn = false;
+    void applyListenMode("always");
+  }
+};
+window.addEventListener("pointerdown", onFirstGesture, { capture: true });
+window.addEventListener("keydown", onFirstGesture, { capture: true });
 
 // Push-to-talk: hold Space anywhere except in form fields, or hold the button.
 const isFormField = (target: EventTarget | null) =>
@@ -153,10 +204,22 @@ if (!WebSpeechStt.isSupported()) {
   showNotice(strings.sttUnsupported);
 }
 
+renderListenMode();
 void fetchHealth().then((health) => {
+  whisperAvailable = health?.whisper ?? false;
+  renderListenMode();
   if (!health) showNotice(strings.serverDown);
   else if (!health.hasKey) showNotice(strings.missingKey);
   else debugEl.textContent = `${health.model} · effort ${health.effort}`;
+  // Whisper needs a few seconds to load its model after `npm run dev`; keep checking.
+  if (!whisperAvailable) {
+    const poll = setInterval(async () => {
+      if (!(await fetchHealth())?.whisper) return;
+      clearInterval(poll);
+      whisperAvailable = true;
+      renderListenMode();
+    }, 5000);
+  }
 });
 
 void Promise.all([fetchVoices(), waitForBrowserVoices()]).then(([voices]) => {

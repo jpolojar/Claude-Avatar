@@ -80,6 +80,24 @@ test("text without any punctuation is cut at a space eventually", () => {
   assert.equal(chunks.join(" "), words);
 });
 
+test("when the stream pauses, a finished-looking sentence goes out without the next word", () => {
+  const take = (text: string) => {
+    const splitter = new SentenceSplitter();
+    splitter.push(text);
+    return splitter.flushIfComplete();
+  };
+  assert.deepEqual(take("Ha, sneaky!"), ["Ha, sneaky!"]);
+  assert.deepEqual(take("Mitä kuuluu? "), ["Mitä kuuluu?"]);
+  assert.deepEqual(take("Hyvä on."), ["Hyvä on."]);
+  assert.deepEqual(take('Hän sanoi "moi."'), ['Hän sanoi "moi."']);
+  assert.deepEqual(take("Odota..."), ["Odota..."]);
+  // Not yet: could continue as an abbreviation, initial, ordinal or mid-sentence.
+  assert.deepEqual(take("Syö esim."), []);
+  assert.deepEqual(take("Kirjan kirjoitti J."), []);
+  assert.deepEqual(take("Syntymäpäiväni on 3."), []);
+  assert.deepEqual(take("Ja sitten"), []);
+});
+
 test("flush returns the unfinished tail", () => {
   const splitter = new SentenceSplitter();
   assert.deepEqual(splitter.push("Moi."), []);

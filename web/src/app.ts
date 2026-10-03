@@ -1,6 +1,7 @@
 import type { ChatEvent, Lang, TtsEngineId } from "../../shared/protocol";
-import { isAbortError, streamChat } from "./api";
-import type { Settings } from "./settings";
+import { endSession, isAbortError, streamChat, transcribe } from "./api";
+import type { ListenMode, Settings } from "./settings";
+import { VadListener, toWav } from "./stt/vad-listener";
 import { WebSpeechStt } from "./stt/webspeech";
 import type { Clip } from "./tts/engine";
 import { SpeechQueue } from "./tts/queue";
@@ -46,6 +47,17 @@ export class App {
   private sttError: string | null = null;
   private readonly stt: WebSpeechStt;
 
+  // Always-on listening.
+  private listener: VadListener | null = null;
+  private utterance = 0;
+  /** Transcript of an utterance that was followed by more speech before it was sent. */
+  private heardSoFar = "";
+
+  /** What the user actually heard of the last reply, if they cut it off. */
+  private pendingInterruption: string | null = null;
+  /** Resolves when the latest turn has fully wound down (speech stopped). */
+  private lastTurn: Promise<void> = Promise.resolve();
+
   constructor(
     private readonly view: AppView,
     private readonly settings: () => Settings,
@@ -62,8 +74,35 @@ export class App {
     return this.settings().lang;
   }
 
-  /** Push-to-talk pressed: cut off any reply in progress and start listening. */
+  private get alwaysOn(): boolean {
+    return this.listener !== null;
+  }
+
+  /** Switches between push-to-talk and always-on listening. Throws if the microphone or VAD fails. */
+  async setListenMode(mode: ListenMode): Promise<void> {
+    if (mode === "always" && !this.listener) {
+      const listener = new VadListener({
+        onSpeechStart: () => this.onVoiceStart(),
+        onSpeechEnd: (audio) => void this.onVoiceEnd(audio),
+        onMisfire: () => this.onVoiceMisfire(),
+      });
+      await listener.start();
+      this.listener = listener;
+    } else if (mode === "ptt" && this.listener) {
+      const listener = this.listener;
+      this.listener = null;
+      await listener.stop();
+    }
+    this.setState(this.state); // refresh the status label
+  }
+
+  /** Space or the button pressed: push-to-talk, or just "stop talking" when always on. */
   startListening(): void {
+    if (this.alwaysOn) {
+      this.interrupt();
+      this.setState("idle");
+      return;
+    }
     if (this.state === "listening") return;
     this.interrupt();
     this.releasedAt = null;
@@ -76,7 +115,7 @@ export class App {
 
   /** Push-to-talk released: the transcript arrives through onTranscript. */
   stopListening(): void {
-    if (this.state !== "listening") return;
+    if (this.alwaysOn || this.state !== "listening") return;
     this.releasedAt = performance.now();
     this.stt.stop();
   }
@@ -107,10 +146,18 @@ export class App {
 
   newConversation(): void {
     this.stop();
+    endSession(this.sessionId); // fold the finished conversation into memory
     this.sessionId = crypto.randomUUID();
+    this.pendingInterruption = null;
+    this.heardSoFar = "";
     this.view.log.clear();
     this.view.setInterim("");
     this.view.setDebug("");
+  }
+
+  /** The page is closing. */
+  endConversation(): void {
+    endSession(this.sessionId);
   }
 
   private interrupt(): void {
@@ -131,6 +178,8 @@ export class App {
     this.setState("idle");
   }
 
+  // --- Push-to-talk (Web Speech) --------------------------------------------
+
   private onTranscript(text: string): void {
     this.view.setInterim("");
     if (this.state !== "listening") return;
@@ -150,9 +199,56 @@ export class App {
     if (!this.stt.active && this.state === "listening") this.setState("idle");
   }
 
+  // --- Always-on (VAD + Whisper) ----------------------------------------------
+
+  /** The user started talking: barge in on whatever the avatar was doing. */
+  private onVoiceStart(): void {
+    this.utterance++;
+    this.interrupt();
+    this.view.showNotice(null);
+    this.setState("listening");
+  }
+
+  private onVoiceMisfire(): void {
+    if (this.state === "listening" && !this.current) this.setState("idle");
+  }
+
+  private async onVoiceEnd(audio: Float32Array): Promise<void> {
+    const utterance = this.utterance;
+    const endedAt = performance.now();
+    this.setState("thinking");
+    let text: string;
+    try {
+      text = (await transcribe(toWav(audio), this.lang)).text;
+    } catch {
+      this.view.showNotice(strings.whisperFailed);
+      if (this.utterance === utterance) this.setState("idle");
+      return;
+    }
+    if (this.utterance !== utterance) {
+      // They kept talking: send this together with the next utterance.
+      this.heardSoFar = `${this.heardSoFar} ${text}`.trim();
+      return;
+    }
+    const full = `${this.heardSoFar} ${text}`.trim();
+    this.heardSoFar = "";
+    if (!full) {
+      this.setState("idle");
+      return;
+    }
+    void this.send(full, performance.now() - endedAt);
+  }
+
+  // --- A conversation turn ------------------------------------------------------
+
   private async send(text: string, sttMs: number | null): Promise<void> {
+    // Let the previous turn wind down first, so what it got to say is known.
+    const previous = this.lastTurn;
+    let turnFinished!: () => void;
+    this.lastTurn = new Promise((resolve) => (turnFinished = resolve));
+
     let lang = this.lang;
-    this.view.log.addUser(text);
+    const removeUserBubble = this.view.log.addUser(text);
     const bubble = this.view.log.addAssistant();
     const controller = this.beginTurn();
 
@@ -237,26 +333,51 @@ export class App {
     };
 
     try {
-      await streamChat({ sessionId: this.sessionId, text, lang }, onEvent, controller.signal);
-      speech.queue.close();
-      await speech.queue.done;
-      if (controller.signal.aborted) bubble.note(strings.interrupted);
-    } catch (err) {
-      speech.stop();
-      if (isAbortError(err)) bubble.note(strings.interrupted);
-      else bubble.error(strings.serverDown);
+      await previous;
+      const interruption = this.pendingInterruption;
+      this.pendingInterruption = null;
+      try {
+        await streamChat(
+          {
+            sessionId: this.sessionId,
+            text,
+            lang,
+            ...(interruption !== null ? { interruption: { spokenText: interruption } } : {}),
+          },
+          onEvent,
+          controller.signal,
+        );
+        speech.queue.close();
+      } catch (err) {
+        if (!isAbortError(err)) {
+          speech.stop();
+          bubble.error(strings.serverDown);
+        }
+      }
+      await speech.queue.done; // returns right away after an interruption
+      if (controller.signal.aborted) {
+        if (timings.firstTextMs !== null) {
+          bubble.note(strings.interrupted);
+          // Tell Claude on the next turn how far the user actually listened.
+          this.pendingInterruption = speech.queue.spokenText;
+        } else if (this.alwaysOn) {
+          // Cut off before any reply (they paused mid-thought and went on):
+          // the server dropped this turn, so it is sent again with what follows.
+          this.heardSoFar = `${text} ${this.heardSoFar}`.trim();
+          removeUserBubble();
+          bubble.remove();
+        } else {
+          bubble.note(strings.interrupted);
+        }
+      }
     } finally {
       this.endTurn(controller);
+      turnFinished();
     }
   }
 
   /** Synthesizes and plays text. A TTS failure is reported but does not fail the turn. */
-  private async speak(
-    text: string,
-    lang: Lang,
-    controller: AbortController,
-    onStart?: (clip: Clip) => void,
-  ): Promise<void> {
+  private async speak(text: string, lang: Lang, controller: AbortController): Promise<void> {
     let clip: Clip;
     try {
       clip = await this.speaker.prepare(text, lang, controller.signal);
@@ -267,7 +388,6 @@ export class App {
     }
     if (controller.signal.aborted) return;
     if (this.current === controller) this.setState("speaking");
-    onStart?.(clip);
     this.view.setSpeaking(clip.engine);
     try {
       await clip.play(controller.signal);
@@ -278,6 +398,7 @@ export class App {
 
   private setState(state: AppState): void {
     this.state = state;
+    this.listener?.setAvatarSpeaking(state === "speaking");
     this.view.setState(state);
   }
 }

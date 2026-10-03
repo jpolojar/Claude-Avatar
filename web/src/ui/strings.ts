@@ -22,6 +22,23 @@ export const strings = {
     thinking: "Ajattelee…",
     speaking: "Puhuu…",
   } satisfies Record<AppState, string>,
+  idleAlwaysOn: "Kuulolla – puhu milloin vain",
+  pttLabel: "Pidä pohjassa ja puhu",
+  stopLabel: "Keskeytä",
+  listenModes: {
+    ptt: "Välilyönti",
+    always: "Aina päällä",
+    alwaysUnavailable: "Aina päällä (Whisper ei käynnissä)",
+  },
+  whisperFailed: "Paikallinen puheentunnistus (Whisper) ei vastannut. Onko npm run dev käynnissä?",
+  micFailed: (message: string) => `Mikrofonia ei saatu käyttöön: ${message}`,
+  memory: {
+    empty: "Muistissa ei ole vielä mitään. Muistiinpanot syntyvät, kun aloitat uuden keskustelun, suljet sivun tai pidät kymmenen minuutin tauon.",
+    updated: (iso: string) =>
+      `Päivitetty ${new Date(iso).toLocaleString("fi-FI", { dateStyle: "short", timeStyle: "short" })}`,
+    confirmClear: "Tyhjennetäänkö avatarin muisti? Tätä ei voi perua.",
+    failed: "Muistin lataaminen epäonnistui.",
+  },
   you: "Sinä",
   avatar: "Avatar",
   interrupted: "(keskeytetty)",

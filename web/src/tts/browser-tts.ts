@@ -2,7 +2,7 @@
 // voices such as Noora). The audio bypasses Web Audio, so it cannot drive
 // amplitude lip sync or be removed by the echo canceller.
 import type { Lang } from "../../../shared/protocol";
-import type { Clip, PrepareOptions, TtsEngine } from "./engine";
+import type { Clip, PlayResult, PrepareOptions, TtsEngine } from "./engine";
 
 const LOCALES: Record<Lang, string> = { fi: "fi-FI", en: "en-US" };
 
@@ -44,25 +44,32 @@ export class BrowserTts implements TtsEngine {
     return {
       engine: this.id,
       voice: chosen?.name ?? null,
+      text,
       prepareMs: 0,
       words: [],
       play: (signal) =>
-        new Promise<void>((resolve) => {
-          if (signal.aborted) return resolve();
+        new Promise<PlayResult>((resolve) => {
+          if (signal.aborted) return resolve({ completed: false, spokenText: "" });
           const utterance = new SpeechSynthesisUtterance(text);
           utterance.lang = LOCALES[lang];
           if (chosen) utterance.voice = chosen;
           utterance.rate = 1 + rate / 100;
-          const finish = () => {
+          // Word boundary events tell how far the voice got before an interruption.
+          let spokenEnd = 0;
+          utterance.onboundary = (event) => {
+            const wordEnd = text.indexOf(" ", event.charIndex);
+            spokenEnd = event.charLength ? event.charIndex + event.charLength : wordEnd < 0 ? text.length : wordEnd;
+          };
+          const finish = (completed: boolean) => {
             signal.removeEventListener("abort", onAbort);
-            resolve();
+            resolve({ completed, spokenText: completed ? text : text.slice(0, spokenEnd).trim() });
           };
           const onAbort = () => {
             speechSynthesis.cancel();
-            finish();
+            finish(false);
           };
-          utterance.onend = finish;
-          utterance.onerror = finish;
+          utterance.onend = () => finish(true);
+          utterance.onerror = () => finish(false);
           signal.addEventListener("abort", onAbort, { once: true });
           speechSynthesis.cancel(); // drop anything stale still queued
           speechSynthesis.speak(utterance);

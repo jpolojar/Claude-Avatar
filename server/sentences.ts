@@ -38,6 +38,15 @@ export class SentenceSplitter {
     return chunks;
   }
 
+  /**
+   * The buffered text, if it already looks like a finished sentence. Used when
+   * the stream pauses: instead of waiting for the next word to confirm the
+   * boundary, speak what is there.
+   */
+  flushIfComplete(): string[] {
+    return looksComplete(this.buffer.trimEnd()) ? this.flush() : [];
+  }
+
   /** Returns whatever is left when the reply ends. */
   flush(): string[] {
     const chunks: string[] = [];
@@ -104,6 +113,19 @@ export function findSentenceEnd(text: string): number | null {
     i = end - 1;
   }
   return null;
+}
+
+/** Ends with . ! ? or … (plus closing quotes) that cannot be an abbreviation, initial or number. */
+function looksComplete(text: string): boolean {
+  let end = text.length;
+  while (end > 0 && `"'”’)»`.includes(text[end - 1]!)) end--;
+  const last = text[end - 1];
+  if (!last || !TERMINATORS.includes(last)) return false;
+  if (last !== ".") return true;
+  let dot = end - 1;
+  while (dot > 0 && text[dot - 1] === ".") dot--; // "..." is an ellipsis
+  if (dot < end - 1) return true;
+  return !/\d/.test(text[dot - 1] ?? "") && !isAbbreviation(text, dot);
 }
 
 /** True when the dot at `dot` ends an abbreviation or an initial ("J. K."). */

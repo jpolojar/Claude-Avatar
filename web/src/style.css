@@ -136,6 +136,27 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
+.memory {
+  flex-basis: 100%;
+}
+
+.memory-text {
+  margin: 0;
+  font: inherit;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.memory-updated {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.memory-updated:empty {
+  display: none;
+}
+
 .echo-result {
   flex-basis: 100%;
   margin: 0;
@@ -356,6 +377,11 @@ kbd {
   border-top: 1px solid var(--border);
   font-size: 0.82rem;
   color: var(--muted);
+}
+
+.status {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .status[data-state="listening"] {

@@ -12,6 +12,8 @@ export interface ChatRequest {
   sessionId: string;
   text: string;
   lang: Lang;
+  /** The previous reply was cut off; this is what the user actually heard of it. */
+  interruption?: { spokenText: string };
 }
 
 export interface Usage {
@@ -87,4 +89,16 @@ export interface HealthResponse {
   model: string;
   effort: string;
   hasKey: boolean;
+  /** The local whisper.cpp server is running (always-on listening possible). */
+  whisper: boolean;
+}
+
+export interface MemoryResponse {
+  summary: string | null;
+  updatedAt: string | null;
+}
+
+export interface SttResponse {
+  text: string;
+  sttMs: number;
 }

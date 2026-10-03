@@ -12,7 +12,7 @@ Toteutussuunnitelma vaiheineen on tiedostossa `C:\Users\jpolo\.claude\plans\drea
 | b | Clauden vastaus puheeksi (edge-tts Noora, varalla selaimen ääni) | ✅ valmis |
 | c | 3D-avatar (VRM) ja huulisynkka | ✅ valmis |
 | d | Streaming ja lausepätkitys | ✅ valmis |
-| e | Barge-in, aina päällä -tila, muisti ja viimeistely | – |
+| e | Barge-in, aina päällä -tila, muisti ja viimeistely | ✅ valmis |
 
 ## Käyttöönotto
 
@@ -23,18 +23,23 @@ Tarvitset Node.js 22.9:n tai uudemman (Node 24 on testattu) sekä Microsoft Edge
    npm install
    ```
 2. Kopioi `.env.example` tiedostoksi `.env` ja lisää Claude API -avain kohtaan `ANTHROPIC_API_KEY`.
-3. Käynnistä palvelin ja käyttöliittymä:
+3. Valinnainen: aina päällä -kuuntelua varten asenna Whisper (katso alla).
+4. Käynnistä palvelin, käyttöliittymä ja Whisper (jos se on asennettu):
    ```
    npm run dev
    ```
-4. Avaa Edgessä osoite http://localhost:5173 ja salli mikrofoni, kun selain kysyy.
+5. Avaa Edgessä osoite http://localhost:5173 ja salli mikrofoni, kun selain kysyy.
 
 ## Käyttö
 
-- **Puhuminen:** pidä välilyöntiä pohjassa, puhu ja päästä irti. Voit myös pitää pohjassa ruudun puhepainiketta tai kirjoittaa viestin tekstikenttään.
-- **Keskeytys:** välilyönnin painaminen kesken vastauksen katkaisee sen. Claude näkee seuraavalla vuorolla, että se keskeytettiin.
-- **Kieli:** valinta vaihtaa puheentunnistuksen ja Clauden vastauskielen. Vaihto astuu voimaan seuraavasta vuorosta.
-- **Uusi keskustelu** tyhjentää historian.
+- **Puhetapa** valitaan yläpalkista:
+  - **Välilyönti:** pidä välilyöntiä pohjassa, puhu ja päästä irti. Tunnistus tapahtuu selaimessa (Web Speech).
+  - **Aina päällä:** puhu milloin vain. Avatar huomaa puheen itse (Silero VAD) ja tunnistaa sen paikallisella Whisperillä. Kun aloitat puhumisen avatarin puheen päälle, se lopettaa ja kuuntelee. Välilyönti tai Keskeytä-painike keskeyttää avatarin myös tässä tilassa.
+- **Kirjoittaminen:** voit aina kirjoittaa viestin myös tekstikenttään.
+- **Keskeytys:** Claude saa seuraavalla vuorolla tiedon siitä, mihin kohtaan sen vastaus keskeytyi, sanan tarkkuudella, eikä se toista keskeytettyä vastausta.
+- **Kieli:** valinta vaihtaa puheentunnistuksen ja Clauden vastauskielen. Kielen voi vaihtaa myös pyytämällä, esimerkiksi sanomalla "puhutaanko englantia".
+- **Uusi keskustelu** tyhjentää historian ja tallentaa edellisestä keskustelusta muistiinpanot.
+- **Muisti:** avatar muistaa sinut keskustelusta toiseen. Kun aloitat uuden keskustelun, suljet sivun tai olet kymmenen minuuttia hiljaa, Claude tiivistää olennaisen (enintään 200 sanaa) tiedostoon `data/memory.json`. Tiivistelmä annetaan avatarille seuraavan keskustelun alussa. Muisti-paneelista näet, mitä se muistaa, ja voit tyhjentää muistin. Tiedostoa voi myös muokata käsin.
 - **Tilarivi** näyttää viiveet mitattuna siitä, kun viesti lähti: puheentunnistus (STT), Clauden ensimmäinen sana, ensimmäinen valmis lause, äänen alku (sekä ensimmäisen lauseen synteesiaika) ja tokenimäärät.
 
 ### Miten viive pidetään pienenä
@@ -87,6 +92,28 @@ python -m piper.http_server -m fi_FI-harri-medium
 
 Palvelin löytää Piperin osoitteesta `http://127.0.0.1:5000` (muutettavissa muuttujalla `AVATAR_PIPER_URL`). Lataa sivu uudelleen, niin Piper tulee valittavaksi.
 
+## Whisper (aina päällä -kuuntelu)
+
+Aina päällä -tila tarvitsee paikallisen [whisper.cpp](https://github.com/ggml-org/whisper.cpp)-palvelimen. Selaimen Web Speech ei käy tähän, koska se avaa mikrofonin itse eikä käytä sovelluksen kaiunpoistettua äänivirtaa. Kaiuttimilla avatarin oma ääni kuuluisi silloin tunnistukseen.
+
+Asennus Windowsille ja NVIDIA-näytönohjaimelle (noin 1,2 Gt):
+
+```
+mkdir local\whisper\bin
+curl -L -o local/whisper/whisper.zip https://github.com/ggml-org/whisper.cpp/releases/download/b5130/whisper-cublas-12.4.0-bin-x64.zip
+tar -xf local/whisper/whisper.zip -C local/whisper/bin
+curl -L -o local/whisper/ggml-large-v3-turbo-q5_0.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
+```
+
+Purkamisen jälkeen ohjelman pitää löytyä polusta `local/whisper/bin/Release/whisper-server.exe`. Jos se on eri paikassa, aseta polku muuttujaan `AVATAR_WHISPER_BIN`.
+
+`npm run dev` käynnistää Whisperin automaattisesti, jos tiedostot löytyvät. Ilman niitä kaikki muu toimii normaalisti. Mallin lataus kestää muutaman sekunnin, ja "Aina päällä" tulee valittavaksi, kun Whisper on valmis. RTX 4070 SUPERilla viiden sekunnin suomenkielinen lause tunnistuu noin 0,2 sekunnissa.
+
+Säädöt löytyvät tiedostosta `web/src/stt/vad-listener.ts`:
+
+- **Puheen loppu:** 0,8 sekunnin hiljaisuus päättää puheenvuoron.
+- **Avatarin puhuessa:** keskeytykseen vaaditaan selvempää puhetta (kynnys 0,75) ja vähintään 0,4 sekuntia, ettei kaiun jäänne keskeytä avataria.
+
 ## Asetukset (`.env`)
 
 | Muuttuja | Oletus | Selitys |
@@ -96,6 +123,10 @@ Palvelin löytää Piperin osoitteesta `http://127.0.0.1:5000` (muutettavissa mu
 | `AVATAR_EFFORT` | `low` | `low` / `medium` / `high` / `xhigh` / `max`. Matala effort antaa nopeimman vastauksen |
 | `AVATAR_PORT` | `3001` | Node-palvelimen portti |
 | `AVATAR_PIPER_URL` | `http://127.0.0.1:5000` | Piper-palvelimen osoite (valinnainen) |
+| `AVATAR_DATA_DIR` | `data` | Kansio, jossa muisti (`memory.json`) on |
+| `AVATAR_WHISPER_PORT` | `8178` | Whisper-palvelimen portti |
+| `AVATAR_WHISPER_BIN` | `local/whisper/bin/Release/whisper-server.exe` | whisper-server-ohjelman polku |
+| `AVATAR_WHISPER_MODEL` | `local/whisper/ggml-large-v3-turbo-q5_0.bin` | Whisper-malli |
 
 Muuttujilla on `AVATAR_`-etuliite, koska Node ei ylikirjoita `.env`-tiedostosta muuttujia, jotka on jo asetettu komentotulkissa. Esimerkiksi `CLAUDE_EFFORT` voi olla jo valmiiksi asetettuna.
 
@@ -110,6 +141,7 @@ npm test            # yksikkötestit
 
 Rakenne:
 
-- `server/`: Express-palvelin. Tiedosto `claude.ts` hoitaa Claude-streamauksen, `sentences.ts` lausepilkkojan, `language-marker.ts` kielenvaihtomerkinnät, `session.ts` keskusteluhistorian ja `persona.md` persoonan. Kansiossa `tts/` ovat puhesynteesimoottorit (edge, piper).
-- `web/`: Vite- ja TypeScript-käyttöliittymä. Tiedosto `app.ts` sisältää tilakoneen, `stt/` puheentunnistuksen, `tts/` puhemoottorit ja varaäänilogiikan, `audio/` Web Audio -ketjun, huulisynkan ja kaikutestin, `avatar/` 3D-avatarin ja sen liikkeet sekä `ui/` näkymät. Kehitystilassa avatar on konsolissa muuttujana `avatar`, esimerkiksi `avatar.setState("thinking")`.
+- `server/`: Express-palvelin. Tiedosto `claude.ts` hoitaa Claude-streamauksen, `sentences.ts` lausepilkkojan, `language-marker.ts` kielenvaihtomerkinnät, `session.ts` keskusteluhistorian ja keskeytykset, `memory.ts` muistin, `stt.ts` Whisper-tunnistuksen ja `persona.md` persoonan.
+- `scripts/whisper.mjs` käynnistää whisper.cpp-palvelimen osana `npm run dev` -komentoa. Kansiossa `tts/` ovat puhesynteesimoottorit (edge, piper).
+- `web/`: Vite- ja TypeScript-käyttöliittymä. Tiedosto `app.ts` sisältää tilakoneen ja keskustelun kulun, `stt/` puheentunnistuksen (Web Speech ja VAD + Whisper), `tts/` puhemoottorit ja varaäänilogiikan, `audio/` Web Audio -ketjun, huulisynkan ja kaikutestin, `avatar/` 3D-avatarin ja sen liikkeet sekä `ui/` näkymät. Kehitystilassa avatar on konsolissa muuttujana `avatar`, esimerkiksi `avatar.setState("thinking")`.
 - `shared/protocol.ts`: palvelimen ja selaimen yhteinen viestimuoto (NDJSON).

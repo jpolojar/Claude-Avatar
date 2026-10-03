@@ -7,7 +7,7 @@ import type { Session } from "./session.js";
 // Created on first use so the server still starts (and reports the problem
 // per request) when ANTHROPIC_API_KEY is missing from .env.
 let client: Anthropic | null = null;
-const getClient = () => (client ??= new Anthropic());
+export const getClient = () => (client ??= new Anthropic());
 
 export interface ReplyHandlers {
   /** Text to show and speak (language markers removed). */

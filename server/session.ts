@@ -17,15 +17,19 @@ const LANGUAGE_SWITCH: Record<Lang, string> = {
 };
 
 const INTERRUPTED_MARK = "[interrupted by the user]";
+const INTERRUPTED_BEFORE_SPEAKING = "[the user interrupted before I said anything]";
 
-export function buildSystemPrompt(lang: Lang, now = new Date()): string {
+export function buildSystemPrompt(lang: Lang, now = new Date(), memory: string | null = null): string {
   const date = now.toLocaleDateString("fi-FI", {
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
   });
-  return `${PERSONA}\n\n${LANGUAGE_LINE[lang]}\n\nTänään on ${date}.`;
+  const remembered = memory
+    ? `\n\nMuistiinpanosi aiemmista keskusteluista tämän käyttäjän kanssa. Hyödynnä niitä luontevasti, kun ne liittyvät aiheeseen, mutta älä luettele niitä:\n${memory}`
+    : "";
+  return `${PERSONA}\n\n${LANGUAGE_LINE[lang]}\n\nTänään on ${date}.${remembered}`;
 }
 
 /**
@@ -37,14 +41,33 @@ export class Session {
   readonly system: string;
   readonly messages: MessageParam[] = [];
   private lang: Lang;
+  /** messages.length when the memory note last covered this session. */
+  private summarizedUpTo = 0;
 
   constructor(
     readonly id: string,
     lang: Lang,
     now = new Date(),
+    memory: string | null = null,
   ) {
     this.lang = lang;
-    this.system = buildSystemPrompt(lang, now);
+    this.system = buildSystemPrompt(lang, now, memory);
+  }
+
+  /** The turns not yet folded into the memory note, as a plain transcript ("" if none). */
+  transcriptSinceSummary(): string {
+    const turns = this.messages.slice(this.summarizedUpTo).filter((m) => m.role !== "system");
+    if (!turns.some((m) => m.role === "assistant")) return "";
+    return turns
+      .map((m) => {
+        const text = typeof m.content === "string" ? m.content : "";
+        return `${m.role === "user" ? "Käyttäjä" : "Avatar"}: ${text.replace(/^\s*\[\[(fi|en)\]\]\s*/, "")}`;
+      })
+      .join("\n");
+  }
+
+  markSummarized(): void {
+    this.summarizedUpTo = this.messages.length;
   }
 
   get language(): Lang {
@@ -74,6 +97,20 @@ export class Session {
     this.lang = lang;
   }
 
+  /**
+   * The user cut off the last reply while it was being spoken: keep only what
+   * they heard. Editing this turn is safe because the history is plain text
+   * (no thinking blocks are replayed); it only re-caches from this turn on.
+   */
+  markInterrupted(spokenText: string): void {
+    const last = this.messages.at(-1);
+    if (last?.role !== "assistant") return;
+    const spoken = spokenText.trim();
+    // Cut mid-sentence gets an ellipsis; cut between sentences doesn't need one.
+    const cut = /[.!?…]$/.test(spoken) ? spoken : `${spoken}…`;
+    last.content = spoken ? `${cut} ${INTERRUPTED_MARK}` : INTERRUPTED_BEFORE_SPEAKING;
+  }
+
   /** Records what the avatar actually said; interrupted replies get a marker. */
   endTurn(replyText: string, interrupted: boolean): void {
     const text = replyText.trim();
@@ -87,10 +124,14 @@ export class Session {
 const sessions = new Map<string, Session>();
 const MAX_SESSIONS = 20;
 
-export function getSession(id: string, lang: Lang): Session {
+export function findSession(id: string): Session | undefined {
+  return sessions.get(id);
+}
+
+export function getSession(id: string, lang: Lang, memory: string | null = null): Session {
   let session = sessions.get(id);
   if (!session) {
-    session = new Session(id, lang);
+    session = new Session(id, lang, new Date(), memory);
     sessions.set(id, session);
     // Single-user app: just drop the oldest conversations.
     while (sessions.size > MAX_SESSIONS) {

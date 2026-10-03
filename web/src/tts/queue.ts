@@ -20,6 +20,7 @@ const LOOKAHEAD = 1;
 export class SpeechQueue {
   private readonly pending: string[] = [];
   private readonly preparing: Promise<Clip | null>[] = [];
+  private readonly heard: string[] = [];
   private closed = false;
   private wake: (() => void) | null = null;
   /** Resolves when everything pushed before close() has been spoken (or the signal aborted). */
@@ -39,6 +40,11 @@ export class SpeechQueue {
     this.pending.push(text);
     this.fill();
     this.wake?.();
+  }
+
+  /** What has actually been heard so far, including a sentence cut off midway. */
+  get spokenText(): string {
+    return this.heard.join(" ");
   }
 
   /** No more sentences will come. */
@@ -74,7 +80,8 @@ export class SpeechQueue {
       if (!clip || this.signal.aborted) continue;
       this.hooks.onClipStart(clip, index++);
       try {
-        await clip.play(this.signal);
+        const result = await clip.play(this.signal);
+        if (result.spokenText) this.heard.push(result.spokenText);
       } finally {
         this.hooks.onClipEnd();
       }
