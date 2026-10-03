@@ -188,6 +188,28 @@ kbd {
   --state-color: var(--speaking);
 }
 
+.avatar-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.stage.has-avatar .orb {
+  display: none;
+}
+
+.stage[data-message]::after {
+  content: attr(data-message);
+  position: absolute;
+  bottom: 12px;
+  left: 16px;
+  right: 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .orb {
   width: 160px;
   height: 160px;

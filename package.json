@@ -16,12 +16,15 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
+    "@pixiv/three-vrm": "^3.5.5",
     "express": "^5.2.1",
-    "msedge-tts": "^2.0.9"
+    "msedge-tts": "^2.0.9",
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.4",
+    "@types/three": "^0.186.0",
     "concurrently": "^10.0.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",

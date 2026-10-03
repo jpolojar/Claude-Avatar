@@ -18,6 +18,8 @@ export interface AppView {
   showNotice(text: string | null): void;
   /** Claude switched the conversation language; update the settings and the UI. */
   setLanguage(lang: Lang): void;
+  /** Speech started (with the engine that plays it) or ended (null); drives lip sync. */
+  setSpeaking(engine: TtsEngineId | null): void;
 }
 
 type DoneEvent = Extract<ChatEvent, { type: "done" }>;
@@ -236,7 +238,12 @@ export class App {
     if (controller.signal.aborted) return;
     if (this.current === controller) this.setState("speaking");
     onStart?.(clip);
-    await clip.play(controller.signal);
+    this.view.setSpeaking(clip.engine);
+    try {
+      await clip.play(controller.signal);
+    } finally {
+      this.view.setSpeaking(null);
+    }
   }
 
   private setState(state: AppState): void {

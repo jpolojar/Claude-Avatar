@@ -25,6 +25,11 @@ export function getAudio(): AudioGraph {
   return graph;
 }
 
+/** The graph if it exists, without creating it (safe to call every frame). */
+export function peekAudio(): AudioGraph | null {
+  return graph;
+}
+
 /** Call from a user gesture so later playback is not blocked by autoplay rules. */
 export function unlockAudio(): void {
   getAudio();

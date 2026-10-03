@@ -2,6 +2,7 @@ import { isLang, type TtsEngineId } from "../../shared/protocol";
 import { fetchHealth, fetchVoices } from "./api";
 import { App } from "./app";
 import { unlockAudio } from "./audio/context";
+import { Avatar } from "./avatar/avatar";
 import { runEchoTest } from "./audio/echo-test";
 import { loadSettings, saveSettings, setServerVoices, type Settings } from "./settings";
 import { WebSpeechStt } from "./stt/webspeech";
@@ -44,10 +45,22 @@ const speaker = new Speaker(getSettings, (from, error) => {
   showNotice(strings.ttsFallback(from));
 });
 
+const avatar = new Avatar(stage);
+avatar
+  .load("/models/avatar.vrm")
+  .then(() => stage.classList.add("has-avatar"))
+  .catch((err: unknown) => {
+    console.warn("Avatar model failed to load; showing the placeholder", err);
+    stage.dataset.message = strings.avatarMissing;
+  });
+// Handy for poking at the avatar from the dev tools console.
+if (import.meta.env.DEV) Object.assign(window, { avatar });
+
 const app = new App(
   {
     log: new ChatLog(byId("log")),
     setState: (state) => {
+      avatar.setState(state);
       stage.dataset.state = state;
       statusEl.dataset.state = state;
       statusEl.textContent = strings.status[state];
@@ -65,6 +78,9 @@ const app = new App(
       langSelect.value = lang;
       settingsPanel.refresh();
     },
+    // Server voices play through Web Audio and drive the lips from the signal;
+    // the browser's own voice is out of reach, so its lips move procedurally.
+    setSpeaking: (engine) => avatar.setMouthSource(engine === null ? null : engine === "browser" ? "procedural" : "audio"),
   },
   getSettings,
   speaker,

@@ -10,7 +10,7 @@ Toteutussuunnitelma vaiheineen on tiedostossa `C:\Users\jpolo\.claude\plans\drea
 |---|---|---|
 | a | Mikki → teksti → Claude → teksti ruudulle | ✅ valmis |
 | b | Clauden vastaus puheeksi (edge-tts Noora, varalla selaimen ääni) | ✅ valmis |
-| c | 3D-avatar (VRM) ja huulisynkka | – |
+| c | 3D-avatar (VRM) ja huulisynkka | ✅ valmis |
 | d | Streaming ja lausepätkitys | – |
 | e | Barge-in, aina päällä -tila, muisti ja viimeistely | – |
 
@@ -36,6 +36,22 @@ Tarvitset Node.js 22.9:n tai uudemman (Node 24 on testattu) sekä Microsoft Edge
 - **Kieli:** valinta vaihtaa puheentunnistuksen ja Clauden vastauskielen. Vaihto astuu voimaan seuraavasta vuorosta.
 - **Uusi keskustelu** tyhjentää historian.
 - **Tilarivi** näyttää viiveet: puheentunnistus, ensimmäinen sana, kokonaisaika ja tokenimäärät.
+
+## Avatar
+
+Avatar on VRM-malli tiedostossa `web/public/models/avatar.vrm`, ja se näytetään [three-vrm](https://github.com/pixiv/three-vrm)-kirjastolla. Tiedosto ei ole gitissä. Oletusmallina on three-vrm:n esimerkkihahmo `VRM1_Constraint_Twist_Sample.vrm` (© pixiv Inc., [VRM Public License 1.0](https://vrm.dev/licenses/1.0/)). Lataa se näin:
+
+```
+curl -L -o web/public/models/avatar.vrm https://raw.githubusercontent.com/pixiv/three-vrm/dev/packages/three-vrm/examples/models/VRM1_Constraint_Twist_Sample.vrm
+```
+
+**Oma malli:** tallenna mikä tahansa VRM-tiedosto (0.x tai 1.0) samalla nimellä ja lataa sivu uudelleen. Malleja saa esimerkiksi [VRoid Hubista](https://hub.vroid.com/), kun käyttöehdot sallivat sen, tai voit tehdä oman ilmaisella [VRoid Studiolla](https://vroid.com/studio).
+
+Avatar toimii näin:
+
+- **Elävyys:** silmät räpyttelevät, rintakehä hengittää, pää liikkuu hitaasti ja katse hypähtelee välillä.
+- **Tilat:** kuunnellessa pää kallistuu kohti ja kasvoilla on hymy. Ajatellessa katse kääntyy ylös ja sivulle. Puhuessa pää nyökkäilee äänen tahdissa.
+- **Huulisynkka:** Edge- ja Piper-äänillä suu liikkuu äänen voimakkuuden mukaan, ja vokaali (a, e, i, o, u) valitaan äänen kirkkaudesta. Selaimen oma ääni ei kulje sivun kautta, joten silloin suu liikkuu arvioidusti.
 
 ## Ääni
 
@@ -85,5 +101,5 @@ npm test            # yksikkötestit
 Rakenne:
 
 - `server/`: Express-palvelin. Tiedosto `claude.ts` hoitaa Claude-streamauksen, `session.ts` keskusteluhistorian ja `persona.md` persoonan. Kansiossa `tts/` ovat puhesynteesimoottorit (edge, piper).
-- `web/`: Vite- ja TypeScript-käyttöliittymä. Tiedosto `app.ts` sisältää tilakoneen, `stt/` puheentunnistuksen, `tts/` puhemoottorit ja varaäänilogiikan, `audio/` Web Audio -ketjun ja kaikutestin sekä `ui/` näkymät.
+- `web/`: Vite- ja TypeScript-käyttöliittymä. Tiedosto `app.ts` sisältää tilakoneen, `stt/` puheentunnistuksen, `tts/` puhemoottorit ja varaäänilogiikan, `audio/` Web Audio -ketjun, huulisynkan ja kaikutestin, `avatar/` 3D-avatarin ja sen liikkeet sekä `ui/` näkymät. Kehitystilassa avatar on konsolissa muuttujana `avatar`, esimerkiksi `avatar.setState("thinking")`.
 - `shared/protocol.ts`: palvelimen ja selaimen yhteinen viestimuoto (NDJSON).

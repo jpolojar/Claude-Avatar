@@ -32,6 +32,7 @@ export const strings = {
     en: "Sorry, I can't answer that.",
   } satisfies Record<Lang, string>,
   noSpeech: "En kuullut mitään. Pidä välilyöntiä pohjassa koko puheen ajan.",
+  avatarMissing: "Avatar-mallia ei löytynyt. Tallenna VRM-malli nimellä web/public/models/avatar.vrm.",
   missingKey: "API-avain puuttuu. Kopioi .env.example tiedostoksi .env, lisää avain ja käynnistä palvelin uudelleen.",
   serverDown: "Palvelimeen ei saada yhteyttä. Onko npm run dev käynnissä?",
   sttUnsupported: "Tämä selain ei tue puheentunnistusta. Käytä Edgeä tai Chromea, tai kirjoita viesti.",
