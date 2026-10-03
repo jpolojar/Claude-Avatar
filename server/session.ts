@@ -7,8 +7,8 @@ type MessageParam = Anthropic.Beta.Messages.BetaMessageParam;
 const PERSONA = readFileSync(new URL("./persona.md", import.meta.url), "utf8").trim();
 
 const LANGUAGE_LINE: Record<Lang, string> = {
-  fi: "Keskustelun kieli on suomi. Vastaa aina suomeksi.",
-  en: "The conversation language is English. Always reply in English, even though these instructions are written in Finnish.",
+  fi: "Keskustelun kieli on aluksi suomi.",
+  en: "The conversation language is English to begin with: reply in English even though these instructions are written in Finnish.",
 };
 
 const LANGUAGE_SWITCH: Record<Lang, string> = {
@@ -67,6 +67,11 @@ export class Session {
       this.messages.length = start;
       this.lang = previousLang;
     };
+  }
+
+  /** Claude switched the language itself (with a [[xx]] marker); no system note needed. */
+  adoptLanguage(lang: Lang): void {
+    this.lang = lang;
   }
 
   /** Records what the avatar actually said; interrupted replies get a marker. */

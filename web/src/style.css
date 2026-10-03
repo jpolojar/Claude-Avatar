@@ -106,6 +106,47 @@ kbd {
   color: var(--muted);
 }
 
+.settings {
+  margin: 10px 16px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.settings summary {
+  padding: 8px 14px;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.settings-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 20px;
+  padding: 4px 14px 12px;
+}
+
+.settings-body select {
+  max-width: 260px;
+}
+
+.settings-body output {
+  min-width: 3.5em;
+  font-variant-numeric: tabular-nums;
+}
+
+.echo-result {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.echo-result:empty {
+  display: none;
+}
+
 .notice {
   margin: 10px 16px 0;
   padding: 10px 14px;

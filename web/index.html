@@ -22,6 +22,34 @@
         </div>
       </header>
 
+      <details class="settings">
+        <summary>Ääniasetukset</summary>
+        <div class="settings-body">
+          <label class="field">
+            <span>Puhemoottori</span>
+            <select id="tts-engine">
+              <option value="edge"></option>
+              <option value="piper"></option>
+              <option value="browser"></option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Ääni</span>
+            <select id="tts-voice"></select>
+          </label>
+          <label class="field">
+            <span>Puhenopeus</span>
+            <input id="tts-rate" type="range" min="-30" max="30" step="5" />
+            <output id="tts-rate-value"></output>
+          </label>
+          <div class="field">
+            <button id="tts-test" type="button" class="secondary">Kokeile ääntä</button>
+            <button id="echo-test" type="button" class="secondary">Kaikutesti</button>
+          </div>
+          <p id="echo-result" class="echo-result"></p>
+        </div>
+      </details>
+
       <div id="notice" class="notice" hidden></div>
 
       <main class="layout">

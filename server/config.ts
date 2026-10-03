@@ -16,4 +16,6 @@ export const config = {
   effort: parseEffort(process.env.AVATAR_EFFORT),
   // Spoken replies are short; this only caps runaway output (thinking included).
   maxTokens: 4096,
+  // Optional offline voice: python -m piper.http_server (see README).
+  piperUrl: (process.env.AVATAR_PIPER_URL || "http://127.0.0.1:5000").replace(/\/+$/, ""),
 };

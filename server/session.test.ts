@@ -5,9 +5,10 @@ import { Session, buildSystemPrompt } from "./session.js";
 test("system prompt carries persona, language and date", () => {
   const fi = buildSystemPrompt("fi", new Date(2026, 9, 3));
   assert.match(fi, /keskustelukaveri/);
-  assert.match(fi, /Vastaa aina suomeksi/);
+  assert.match(fi, /kieli on aluksi suomi/);
+  assert.match(fi, /\[\[en\]\]/);
   assert.match(fi, /2026/);
-  assert.match(buildSystemPrompt("en"), /Always reply in English/);
+  assert.match(buildSystemPrompt("en"), /reply in English/);
 });
 
 test("turns are appended in order", () => {
@@ -31,7 +32,19 @@ test("language switch appends a system message after the user turn", () => {
   );
   assert.equal(s.language, "en");
   // The frozen system prompt does not change mid-conversation.
-  assert.match(s.system, /Vastaa aina suomeksi/);
+  assert.match(s.system, /kieli on aluksi suomi/);
+});
+
+test("a language Claude switched to itself adds no system note", () => {
+  const s = new Session("e", "fi");
+  s.beginTurn("Can you speak English?", "fi");
+  s.adoptLanguage("en");
+  s.endTurn("[[en]] Sure!", false);
+  s.beginTurn("Great", "en");
+  assert.deepEqual(
+    s.messages.map((m) => m.role),
+    ["user", "assistant", "user"],
+  );
 });
 
 test("rollback undoes the turn and the language switch", () => {

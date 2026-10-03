@@ -16,7 +16,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "msedge-tts": "^2.0.9"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",

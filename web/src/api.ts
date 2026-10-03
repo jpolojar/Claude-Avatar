@@ -1,4 +1,4 @@
-import type { ChatEvent, ChatRequest, HealthResponse } from "../../shared/protocol";
+import type { ChatEvent, ChatRequest, HealthResponse, VoiceOption } from "../../shared/protocol";
 
 export async function fetchHealth(): Promise<HealthResponse | null> {
   try {
@@ -6,6 +6,15 @@ export async function fetchHealth(): Promise<HealthResponse | null> {
     return res.ok ? ((await res.json()) as HealthResponse) : null;
   } catch {
     return null;
+  }
+}
+
+export async function fetchVoices(): Promise<VoiceOption[]> {
+  try {
+    const res = await fetch("/api/tts/voices");
+    return res.ok ? ((await res.json()) as VoiceOption[]) : [];
+  } catch {
+    return [];
   }
 }
 

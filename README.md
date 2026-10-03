@@ -9,7 +9,7 @@ Toteutussuunnitelma vaiheineen on tiedostossa `C:\Users\jpolo\.claude\plans\drea
 | Vaihe | Sisältö | Tila |
 |---|---|---|
 | a | Mikki → teksti → Claude → teksti ruudulle | ✅ valmis |
-| b | Clauden vastaus puheeksi (edge-tts Noora, varalla selaimen ääni) | – |
+| b | Clauden vastaus puheeksi (edge-tts Noora, varalla selaimen ääni) | ✅ valmis |
 | c | 3D-avatar (VRM) ja huulisynkka | – |
 | d | Streaming ja lausepätkitys | – |
 | e | Barge-in, aina päällä -tila, muisti ja viimeistely | – |
@@ -37,6 +37,30 @@ Tarvitset Node.js 22.9:n tai uudemman (Node 24 on testattu) sekä Microsoft Edge
 - **Uusi keskustelu** tyhjentää historian.
 - **Tilarivi** näyttää viiveet: puheentunnistus, ensimmäinen sana, kokonaisaika ja tokenimäärät.
 
+## Ääni
+
+Avaa **Ääniasetukset** sivun yläosasta. Voit valita kolmesta puhemoottorista:
+
+| Moottori | Kuvaus |
+|---|---|
+| **Edge-neuroääni** (oletus) | Microsoftin Noora (suomi) sekä Ava tai Emma (englanti) Node-palvelimen kautta ([msedge-tts](https://github.com/Migushthe2nd/MsEdgeTTS)). Ääni tulee tiedostona sanakohtaisine ajoituksineen, joten huulisynkka ja kaiunpoisto toimivat. Rajapinta on Microsoftin epävirallinen ja voi joskus muuttua. Silloin sovellus vaihtaa automaattisesti selaimen omaan ääneen ja kertoo siitä. |
+| **Selaimen oma ääni** | Edgen oma Noora Online (Natural) -ääni. Virallinen ja aina saatavilla, mutta huulisynkka on vain arvio, eikä kaiunpoisto koske sitä. |
+| **Piper (offline)** | Valinnainen. Paikallinen miesääni Harri, jos haluat toimia täysin ilman verkkoa. Asennus erikseen, katso alta. |
+
+**Ava (monikielinen)** puhuu sekä suomea että englantia samalla äänellä, jos haluat avatarille yhden äänen kummallekin kielelle.
+
+**Kaikutesti** soittaa näytteen kaiuttimista kahdesti ja mittaa, kuinka paljon avatarin ääni kuuluu mikrofoniin kaiunpoiston kanssa ja ilman. Tulos kertoo, toimiiko äänellä keskeyttäminen kaiuttimilla vaiheessa e. Ole testin ajan hiljaa.
+
+### Piper (valinnainen)
+
+```
+pip install piper-tts[http]
+python -m piper.download_voices fi_FI-harri-medium
+python -m piper.http_server -m fi_FI-harri-medium
+```
+
+Palvelin löytää Piperin osoitteesta `http://127.0.0.1:5000` (muutettavissa muuttujalla `AVATAR_PIPER_URL`). Lataa sivu uudelleen, niin Piper tulee valittavaksi.
+
 ## Asetukset (`.env`)
 
 | Muuttuja | Oletus | Selitys |
@@ -45,6 +69,7 @@ Tarvitset Node.js 22.9:n tai uudemman (Node 24 on testattu) sekä Microsoft Edge
 | `AVATAR_MODEL` | `claude-opus-5-5` | Claude-malli |
 | `AVATAR_EFFORT` | `low` | `low` / `medium` / `high` / `xhigh` / `max`. Matala effort antaa nopeimman vastauksen |
 | `AVATAR_PORT` | `3001` | Node-palvelimen portti |
+| `AVATAR_PIPER_URL` | `http://127.0.0.1:5000` | Piper-palvelimen osoite (valinnainen) |
 
 Muuttujilla on `AVATAR_`-etuliite, koska Node ei ylikirjoita `.env`-tiedostosta muuttujia, jotka on jo asetettu komentotulkissa. Esimerkiksi `CLAUDE_EFFORT` voi olla jo valmiiksi asetettuna.
 
@@ -59,6 +84,6 @@ npm test            # yksikkötestit
 
 Rakenne:
 
-- `server/`: Express-palvelin. Tiedosto `claude.ts` hoitaa Claude-streamauksen, `session.ts` keskusteluhistorian ja `persona.md` persoonan.
-- `web/`: Vite- ja TypeScript-käyttöliittymä. Tiedosto `app.ts` sisältää tilakoneen, `stt/` puheentunnistuksen ja `ui/` näkymät.
+- `server/`: Express-palvelin. Tiedosto `claude.ts` hoitaa Claude-streamauksen, `session.ts` keskusteluhistorian ja `persona.md` persoonan. Kansiossa `tts/` ovat puhesynteesimoottorit (edge, piper).
+- `web/`: Vite- ja TypeScript-käyttöliittymä. Tiedosto `app.ts` sisältää tilakoneen, `stt/` puheentunnistuksen, `tts/` puhemoottorit ja varaäänilogiikan, `audio/` Web Audio -ketjun ja kaikutestin sekä `ui/` näkymät.
 - `shared/protocol.ts`: palvelimen ja selaimen yhteinen viestimuoto (NDJSON).

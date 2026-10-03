@@ -1,8 +1,9 @@
 import express from "express";
-import { isLang, type ChatEvent, type HealthResponse } from "../shared/protocol.js";
+import { isLang, isServerTtsEngine, type ChatEvent, type HealthResponse } from "../shared/protocol.js";
 import { classifyError, streamReply } from "./claude.js";
 import { config } from "./config.js";
 import { getSession } from "./session.js";
+import { MAX_TTS_CHARS, isKnownVoice, listVoices, synthesize } from "./tts/index.js";
 
 const app = express();
 app.use(express.json({ limit: "100kb" }));
@@ -45,6 +46,10 @@ app.post("/api/chat", async (req, res) => {
     const result = await streamReply(session, abort.signal, {
       onText: (delta) => send({ type: "delta", text: delta }),
       onReset: () => send({ type: "reset" }),
+      onLanguage: (newLang) => {
+        session.adoptLanguage(newLang);
+        send({ type: "lang", lang: newLang });
+      },
     });
 
     // A refused reply (after any fallback) is dropped along with its prompt;
@@ -75,6 +80,34 @@ app.post("/api/chat", async (req, res) => {
     send({ type: "error", code, message });
   } finally {
     res.end();
+  }
+});
+
+app.get("/api/tts/voices", async (_req, res) => {
+  res.json(await listVoices());
+});
+
+app.post("/api/tts", async (req, res) => {
+  const { text, engine, voice, rate } = (req.body ?? {}) as Record<string, unknown>;
+  if (
+    typeof text !== "string" ||
+    !text.trim() ||
+    text.length > MAX_TTS_CHARS ||
+    !isServerTtsEngine(engine) ||
+    typeof voice !== "string" ||
+    !isKnownVoice(engine, voice)
+  ) {
+    res.status(400).json({ error: "Expected { text, engine, voice, rate } with a known voice" });
+    return;
+  }
+  try {
+    const result = await synthesize({ text, engine, voice, rate: typeof rate === "number" ? rate : 0 });
+    console.log(`[tts] ${engine}/${voice} · ${Math.round(result.synthMs)} ms · ${text.length} chars`);
+    res.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[tts] ${engine} failed: ${message}`);
+    res.status(502).json({ error: message });
   }
 });
 
