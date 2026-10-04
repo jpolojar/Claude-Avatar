@@ -55,6 +55,13 @@ Kuvake (`assets/avatar.ico`) on renderöity avatar-mallista.
 - **Keskeytys:** Claude saa seuraavalla vuorolla tiedon siitä, mihin kohtaan sen vastaus keskeytyi, sanan tarkkuudella, eikä se toista keskeytettyä vastausta.
 - **Kieli:** valinta vaihtaa puheentunnistuksen ja Clauden vastauskielen. Kielen voi vaihtaa myös pyytämällä, esimerkiksi sanomalla "puhutaanko englantia".
 - **Uusi keskustelu** tyhjentää historian ja tallentaa edellisestä keskustelusta muistiinpanot.
+- **Tunneilmeet:** Claude merkitsee vastauksensa sävyn lause kerrallaan (ilo, suru, yllättyminen, rauhallisuus tai neutraali), ja avatarin ilme vaihtuu juuri, kun kyseinen lause alkaa kuulua. Merkinnät eivät näy eivätkä kuulu. Puheen jälkeen ilme palaa muutaman sekunnin päästä neutraaliksi.
+- **Verkkohaku:** Claude voi hakea verkosta ajankohtaista tietoa, kuten säätä, uutisia tai aukioloaikoja.
+  - Kun haku alkaa, avatar sanoo lyhyen täytelauseen, esimerkiksi "Hetki, katson.", ja odottaa ajatteluasennossa. Tilarivillä näkyy hakusana.
+  - Tulos kerrotaan lyhyesti haun jälkeen.
+  - Täytelauseen sanoo sovellus, ei Claude, koska Opus 5.5 ei puhu ennen työkalukutsua: se muuttaa sellaisen tekstin näkymättömiksi edistymismerkinnöiksi.
+  - Haku käyttää Clauden omaa web search -työkalua, enintään 3 hakua per vuoro. Se maksaa Claude API:n hinnaston mukaan noin sentin per haku sekä hakutulosten tokenit.
+  - Asetus `AVATAR_WEB_SEARCH`: `fast` (oletus) on tavallinen haku. `thorough` suodattaa tulokset ensin koodilla, mikä on tarkempi sekaville sivuille mutta selvästi hitaampi. Ensimmäisessä testissä vastaus alkoi vasta 12,6 sekunnin kohdalla. `off` poistaa haun käytöstä.
 - **Muisti:** avatar muistaa sinut keskustelusta toiseen. Kun aloitat uuden keskustelun, suljet sivun tai olet kymmenen minuuttia hiljaa, Claude tiivistää olennaisen (enintään 200 sanaa) tiedostoon `data/memory.json`. Tiivistelmä annetaan avatarille seuraavan keskustelun alussa. Muisti-paneelista näet, mitä se muistaa, ja voit tyhjentää muistin. Tiedostoa voi myös muokata käsin.
 - **Tilarivi** näyttää viiveet mitattuna siitä, kun viesti lähti: puheentunnistus (STT), Clauden ensimmäinen sana, ensimmäinen valmis lause, äänen alku (sekä ensimmäisen lauseen synteesiaika) ja tokenimäärät.
 
@@ -140,6 +147,10 @@ Säädöt löytyvät tiedostosta `web/src/stt/vad-listener.ts`:
 | `AVATAR_PORT` | `3001` | Node-palvelimen portti |
 | `AVATAR_PIPER_URL` | `http://127.0.0.1:5000` | Piper-palvelimen osoite (valinnainen) |
 | `AVATAR_DATA_DIR` | `data` | Kansio, jossa muisti (`memory.json`) on |
+| `AVATAR_WEB_SEARCH` | `fast` | `fast` (tavallinen haku), `thorough` (tulokset suodatetaan koodilla, hitaampi) tai `off` |
+| `AVATAR_COUNTRY` | `FI` | Likimääräinen sijainti verkkohakuja varten (maakoodi) |
+| `AVATAR_TIMEZONE` | `Europe/Helsinki` | Aikavyöhyke verkkohakuja varten |
+| `AVATAR_CITY` | – | Valinnainen kotikaupunki, esimerkiksi `Tampere`, jotta sää ja paikalliset haut osuvat oikein |
 | `AVATAR_WHISPER_PORT` | `8178` | Whisper-palvelimen portti |
 | `AVATAR_WHISPER_BIN` | `local/whisper/bin/Release/whisper-server.exe` | whisper-server-ohjelman polku |
 | `AVATAR_WHISPER_MODEL` | `local/whisper/ggml-large-v3-turbo-q5_0.bin` | Whisper-malli |
@@ -157,7 +168,7 @@ npm test            # yksikkötestit
 
 Rakenne:
 
-- `server/`: Express-palvelin. Tiedosto `claude.ts` hoitaa Claude-streamauksen, `sentences.ts` lausepilkkojan, `language-marker.ts` kielenvaihtomerkinnät, `session.ts` keskusteluhistorian ja keskeytykset, `memory.ts` muistin, `stt.ts` Whisper-tunnistuksen ja `persona.md` persoonan.
+- `server/`: Express-palvelin. Tiedosto `claude.ts` hoitaa Claude-streamauksen, `sentences.ts` lausepilkkojan, `markers.ts` kieli- ja tunnemerkinnät, `session.ts` keskusteluhistorian ja keskeytykset, `memory.ts` muistin, `stt.ts` Whisper-tunnistuksen ja `persona.md` persoonan.
 - `scripts/whisper.mjs` käynnistää whisper.cpp-palvelimen osana `npm run dev` -komentoa. Kansiossa `tts/` ovat puhesynteesimoottorit (edge, piper).
 - `web/`: Vite- ja TypeScript-käyttöliittymä. Tiedosto `app.ts` sisältää tilakoneen ja keskustelun kulun, `stt/` puheentunnistuksen (Web Speech ja VAD + Whisper), `tts/` puhemoottorit ja varaäänilogiikan, `audio/` Web Audio -ketjun, huulisynkan ja kaikutestin, `avatar/` 3D-avatarin ja sen liikkeet sekä `ui/` näkymät. Kehitystilassa avatar on konsolissa muuttujana `avatar`, esimerkiksi `avatar.setState("thinking")`.
 - `shared/protocol.ts`: palvelimen ja selaimen yhteinen viestimuoto (NDJSON).

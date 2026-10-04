@@ -23,6 +23,14 @@ export const strings = {
     speaking: "Puhuu…",
   } satisfies Record<AppState, string>,
   idleAlwaysOn: "Kuulolla – puhu milloin vain",
+  searching: (query: string) => (query ? `Hakee verkosta: ${query}` : "Hakee verkosta…"),
+  searched: "(haki verkosta)",
+  /** Said aloud when a web search starts before Claude has said anything. */
+  searchFillers: {
+    fi: ["Hetki, katson.", "Odota hetki, tarkistan.", "Katsotaanpa.", "Hetkinen, haen tiedon."],
+    en: ["One moment, let me check.", "Let me look that up.", "Hang on, I'll check.", "Give me a second."],
+  } satisfies Record<Lang, string[]>,
+  searchedFor: (query: string) => `(haki verkosta: ${query})`,
   pttLabel: "Pidä pohjassa ja puhu",
   stopLabel: "Keskeytä",
   listenModes: {
@@ -108,5 +116,6 @@ export const strings = {
     tts: "TTS",
     tokens: "tokenit",
     cache: "välimuisti",
+    searches: "verkkohaut",
   },
 };

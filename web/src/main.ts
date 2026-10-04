@@ -1,6 +1,6 @@
 import { isLang, type TtsEngineId } from "../../shared/protocol";
 import { fetchHealth, fetchVoices } from "./api";
-import { App } from "./app";
+import { App, type AppState } from "./app";
 import { unlockAudio } from "./audio/context";
 import { Avatar } from "./avatar/avatar";
 import { runEchoTest } from "./audio/echo-test";
@@ -46,6 +46,17 @@ const speaker = new Speaker(getSettings, (from, error) => {
   showNotice(strings.ttsFallback(from));
 });
 
+let appState: AppState = "idle";
+let searchQuery: string | null = null;
+const renderStatus = () => {
+  statusEl.textContent =
+    appState === "thinking" && searchQuery !== null
+      ? strings.searching(searchQuery)
+      : appState === "idle" && settings.listenMode === "always"
+        ? strings.idleAlwaysOn
+        : strings.status[appState];
+};
+
 const avatar = new Avatar(stage);
 avatar
   .load("/models/avatar.vrm")
@@ -61,11 +72,11 @@ const app = new App(
   {
     log: new ChatLog(byId("log")),
     setState: (state) => {
+      appState = state;
       avatar.setState(state);
       stage.dataset.state = state;
       statusEl.dataset.state = state;
-      statusEl.textContent =
-        state === "idle" && settings.listenMode === "always" ? strings.idleAlwaysOn : strings.status[state];
+      renderStatus();
       pttButton.classList.toggle("active", state === "listening");
     },
     setInterim: (text) => {
@@ -83,6 +94,11 @@ const app = new App(
     // Server voices play through Web Audio and drive the lips from the signal;
     // the browser's own voice is out of reach, so its lips move procedurally.
     setSpeaking: (engine) => avatar.setMouthSource(engine === null ? null : engine === "browser" ? "procedural" : "audio"),
+    setEmotion: (emotion) => avatar.setEmotion(emotion),
+    setSearch: (query) => {
+      searchQuery = query;
+      renderStatus();
+    },
   },
   getSettings,
   speaker,

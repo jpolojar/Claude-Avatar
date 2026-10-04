@@ -98,6 +98,27 @@ test("when the stream pauses, a finished-looking sentence goes out without the n
   assert.deepEqual(take("Ja sitten"), []);
 });
 
+test("an emotion mark starts a new sentence and stays with it", () => {
+  const happy = "";
+  const surprised = "";
+  assert.deepEqual(split(`${happy}Hauska kuulla. ${surprised}ihanko totta?`), [
+    `${happy}Hauska kuulla.`,
+    `${surprised}ihanko totta?`,
+  ]);
+
+  // A mark right after a sentence settles the boundary at once.
+  const splitter = new SentenceSplitter();
+  assert.deepEqual(splitter.push(`Hetki, katson. ${surprised}`), ["Hetki, katson."]);
+  splitter.push("Huomenna sataa.");
+  assert.deepEqual(splitter.flush(), [`${surprised}Huomenna sataa.`]);
+
+  // During a pause the finished sentence goes out; a mark glued to it waits for its sentence.
+  const paused = new SentenceSplitter();
+  assert.deepEqual(paused.push(`Hetki, katson.${surprised}`), []);
+  assert.deepEqual(paused.flushIfComplete(), ["Hetki, katson."]);
+  assert.deepEqual(paused.flush(), [surprised]);
+});
+
 test("flush returns the unfinished tail", () => {
   const splitter = new SentenceSplitter();
   assert.deepEqual(splitter.push("Moi."), []);

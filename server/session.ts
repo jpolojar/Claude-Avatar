@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { Lang } from "../shared/protocol.js";
+import { config } from "./config.js";
+import { stripMarkers } from "./markers.js";
 
 type MessageParam = Anthropic.Beta.Messages.BetaMessageParam;
 
@@ -16,6 +18,8 @@ const LANGUAGE_SWITCH: Record<Lang, string> = {
   en: "The user switched the conversation language to English. Reply in English from now on.",
 };
 
+const WEB_SEARCH = `Verkkohaku: voit hakea verkosta ajankohtaista tietoa, kuten säätä, uutisia, aukioloaikoja, tapahtumia, urheilutuloksia tai hintoja. Hae vain, kun vastaus todella vaatii tuoretta tietoa. Tavallinen juttelu ja yleistieto eivät vaadi hakua. Yksi haku riittää yleensä. Sovellus kertoo käyttäjälle itse, että haet tietoa, joten älä aloita vastausta sanomalla, että katsoit tai hait jotain. Kerro tulos yhdellä tai kahdella lyhyellä lauseella omin sanoin: vain olennainen, luvut pyöristettyinä ja ilman lähteitä tai osoitteita, ellei käyttäjä kysy niitä. Jos tulokset ovat epävarmoja, sano se lyhyesti. Jos tarvitset paikkakunnan eikä käyttäjä ole maininnut sitä, oleta Suomi ja kysy tarvittaessa tarkennusta.`;
+
 const INTERRUPTED_MARK = "[interrupted by the user]";
 const INTERRUPTED_BEFORE_SPEAKING = "[the user interrupted before I said anything]";
 
@@ -29,7 +33,8 @@ export function buildSystemPrompt(lang: Lang, now = new Date(), memory: string |
   const remembered = memory
     ? `\n\nMuistiinpanosi aiemmista keskusteluista tämän käyttäjän kanssa. Hyödynnä niitä luontevasti, kun ne liittyvät aiheeseen, mutta älä luettele niitä:\n${memory}`
     : "";
-  return `${PERSONA}\n\n${LANGUAGE_LINE[lang]}\n\nTänään on ${date}.${remembered}`;
+  const search = config.webSearch !== "off" ? `\n\n${WEB_SEARCH}` : "";
+  return `${PERSONA}${search}\n\n${LANGUAGE_LINE[lang]}\n\nTänään on ${date}.${remembered}`;
 }
 
 /**
@@ -61,7 +66,7 @@ export class Session {
     return turns
       .map((m) => {
         const text = typeof m.content === "string" ? m.content : "";
-        return `${m.role === "user" ? "Käyttäjä" : "Avatar"}: ${text.replace(/^\s*\[\[(fi|en)\]\]\s*/, "")}`;
+        return `${m.role === "user" ? "Käyttäjä" : "Avatar"}: ${stripMarkers(text)}`;
       })
       .join("\n");
   }

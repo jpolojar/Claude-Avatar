@@ -1,4 +1,4 @@
-import type { ChatEvent, Lang, TtsEngineId } from "../../shared/protocol";
+import type { ChatEvent, Emotion, Lang, TtsEngineId } from "../../shared/protocol";
 import { endSession, isAbortError, streamChat, transcribe } from "./api";
 import type { ListenMode, Settings } from "./settings";
 import { VadListener, toWav } from "./stt/vad-listener";
@@ -22,7 +22,14 @@ export interface AppView {
   setLanguage(lang: Lang): void;
   /** Speech started (with the engine that plays it) or ended (null); drives lip sync. */
   setSpeaking(engine: TtsEngineId | null): void;
+  /** The mood Claude marked for the sentence now being spoken. */
+  setEmotion(emotion: Emotion): void;
+  /** Claude is searching the web ("" when the query is unknown), or stopped (null). */
+  setSearch(query: string | null): void;
 }
+
+/** Silence between sentences longer than this means Claude is still busy. */
+const SPEECH_GAP_MS = 400;
 
 type DoneEvent = Extract<ChatEvent, { type: "done" }>;
 
@@ -264,6 +271,11 @@ export class App {
     };
     const showTimings = () => this.view.setDebug(formatDebug(timings));
 
+    // When speech runs dry mid-turn (Claude is searching or still writing),
+    // look thoughtful instead of standing there in the speaking pose.
+    let gapTimer: ReturnType<typeof setTimeout> | undefined;
+    let fillerSpoken = false;
+
     // Sentences are spoken as they arrive. A fallback reset or a refusal
     // replaces whatever is queued, so speech gets its own chained abort signal.
     let ttsErrorShown = false;
@@ -271,17 +283,25 @@ export class App {
       const speech = new AbortController();
       controller.signal.addEventListener("abort", () => speech.abort(), { once: true });
       const queue = new SpeechQueue((sentence, signal) => this.speaker.prepare(sentence, lang, signal), speech.signal, {
-        onClipStart: (clip) => {
+        onClipStart: (clip, _index, emotion) => {
+          clearTimeout(gapTimer);
           if (timings.audioStartMs === null) {
             timings.audioStartMs = performance.now() - sentAt;
             timings.ttsMs = clip.prepareMs;
             timings.engine = clip.engine;
             showTimings();
           }
+          if (emotion) this.view.setEmotion(emotion);
           if (this.current === controller) this.setState("speaking");
           this.view.setSpeaking(clip.engine);
         },
-        onClipEnd: () => this.view.setSpeaking(null),
+        onClipEnd: () => {
+          this.view.setSpeaking(null);
+          clearTimeout(gapTimer);
+          gapTimer = setTimeout(() => {
+            if (this.current === controller && this.state === "speaking") this.setState("thinking");
+          }, SPEECH_GAP_MS);
+        },
         onError: () => {
           if (ttsErrorShown) return;
           ttsErrorShown = true;
@@ -304,7 +324,18 @@ export class App {
           break;
         case "sentence":
           timings.firstSentenceMs ??= performance.now() - sentAt;
-          speech.queue.push(event.text);
+          speech.queue.push(event.text, event.emotion);
+          break;
+        case "search":
+          this.view.setSearch(event.query ?? "");
+          bubble.note(event.query ? strings.searchedFor(event.query) : strings.searched);
+          // Claude says nothing before a tool call (the model turns such text
+          // into hidden progress notes), so fill the silence ourselves.
+          if (!fillerSpoken && timings.firstSentenceMs === null) {
+            fillerSpoken = true;
+            const fillers = strings.searchFillers[lang];
+            speech.queue.push(fillers[Math.floor(Math.random() * fillers.length)]!, "neutral");
+          }
           break;
         case "reset":
           bubble.set("");
@@ -371,6 +402,8 @@ export class App {
         }
       }
     } finally {
+      clearTimeout(gapTimer);
+      this.view.setSearch(null);
       this.endTurn(controller);
       turnFinished();
     }
@@ -413,6 +446,7 @@ function formatDebug(t: TurnTimings): string {
     t.firstSentenceMs !== null ? `${d.firstSentence} ${ms(t.firstSentenceMs)}` : null,
     t.audioStartMs !== null ? `${d.audioStart} ${ms(t.audioStartMs)} (${d.tts} ${ms(t.ttsMs)}, ${t.engine})` : null,
     usage ? `${d.tokens} ${usage.inputTokens}→${usage.outputTokens} · ${d.cache} ${usage.cacheReadTokens}` : null,
+    usage?.webSearches ? `${d.searches} ${usage.webSearches}` : null,
     t.done?.model ?? null,
   ];
   return parts.filter(Boolean).join(" · ");

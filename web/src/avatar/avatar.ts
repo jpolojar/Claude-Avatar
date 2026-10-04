@@ -3,10 +3,11 @@
 import { VRMLoaderPlugin, VRMUtils, type VRM, type VRMHumanBoneName } from "@pixiv/three-vrm";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import type { Emotion } from "../../../shared/protocol";
 import type { AppState } from "../app";
 import { peekAudio } from "../audio/context";
 import { AmplitudeLipSync, approach, proceduralMouth, type MouthShape } from "../audio/lipsync";
-import { Blinker, STATE_POSES, Saccades, drift } from "./motion";
+import { Blinker, EMOTION_POSES, MOOD_EXPRESSIONS, STATE_POSES, Saccades, drift } from "./motion";
 
 /** Where the mouth movement comes from while the avatar speaks. */
 export type MouthSource = "audio" | "procedural" | null;
@@ -14,6 +15,8 @@ export type MouthSource = "audio" | "procedural" | null;
 const VOWELS = ["aa", "ih", "ou", "ee", "oh"] as const;
 const POSE_TAU = 0.35; // seconds to settle into a new state pose
 const EXPRESSION_TAU = 0.25;
+/** How long a mood lingers after the avatar stops talking. */
+const EMOTION_HOLD_MS = 3000;
 
 export class Avatar {
   private readonly renderer: THREE.WebGLRenderer;
@@ -25,6 +28,8 @@ export class Avatar {
   private vrm: VRM | null = null;
 
   private state: AppState = "idle";
+  private emotion: Emotion = "neutral";
+  private emotionTimer: ReturnType<typeof setTimeout> | undefined;
   private mouthSource: MouthSource = null;
   private readonly blinker = new Blinker();
   private readonly saccades = new Saccades();
@@ -87,6 +92,18 @@ export class Avatar {
 
   setState(state: AppState): void {
     this.state = state;
+    clearTimeout(this.emotionTimer);
+    if (state === "listening") {
+      this.emotion = "neutral"; // attentive face while the user talks
+    } else if (state === "idle") {
+      this.emotionTimer = setTimeout(() => (this.emotion = "neutral"), EMOTION_HOLD_MS);
+    }
+  }
+
+  /** The mood of what is being said; lasts until changed or the conversation moves on. */
+  setEmotion(emotion: Emotion): void {
+    clearTimeout(this.emotionTimer);
+    this.emotion = emotion;
   }
 
   setMouthSource(source: MouthSource): void {
@@ -123,13 +140,14 @@ export class Avatar {
   private animate(vrm: VRM, dt: number): void {
     const t = this.time;
     const pose = STATE_POSES[this.state];
+    const mood = this.emotion === "neutral" ? null : EMOTION_POSES[this.emotion];
     const mouth = this.mouthShape(dt);
 
-    // Head: state pose + slow drift + a small nod with the voice.
+    // Head: state pose + mood + slow drift + a small nod with the voice.
     const k = 1 - Math.exp(-dt / POSE_TAU);
-    this.head.x += (pose.head.x - this.head.x) * k;
-    this.head.y += (pose.head.y - this.head.y) * k;
-    this.head.z += (pose.head.z - this.head.z) * k;
+    this.head.x += (pose.head.x + (mood?.head.x ?? 0) - this.head.x) * k;
+    this.head.y += (pose.head.y + (mood?.head.y ?? 0) - this.head.y) * k;
+    this.head.z += (pose.head.z + (mood?.head.z ?? 0) - this.head.z) * k;
     setRotation(vrm, "neck", {
       x: this.head.x * 0.4 + drift(t, 1) * 0.02 + mouth.level * 0.02,
       y: this.head.y * 0.4 + drift(t, 2) * 0.04,
@@ -156,8 +174,13 @@ export class Avatar {
       this.camera.position.z,
     );
 
-    // Expressions: state mood, blink and vowels.
-    const targets: Record<string, number> = { ...pose.expressions, blink: this.blinker.update(t) };
+    // Expressions: Claude's marked mood (or the state's default), blink and
+    // vowels. Every mood is listed so the previous one fades out.
+    const targets: Record<string, number> = {
+      ...Object.fromEntries(MOOD_EXPRESSIONS.map((name) => [name, 0])),
+      ...(mood ? mood.expressions : pose.expressions),
+      blink: this.blinker.update(t),
+    };
     const open = mouth.level;
     targets.aa = open * 0.9;
     targets.ee = open * mouth.brightness * 0.35;

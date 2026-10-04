@@ -8,6 +8,15 @@ export function isLang(value: unknown): value is Lang {
   return value === "fi" || value === "en";
 }
 
+/** Moods Claude can mark its sentences with; the avatar's face follows them. */
+export type Emotion = "neutral" | "happy" | "sad" | "surprised" | "relaxed";
+
+export const EMOTIONS: readonly Emotion[] = ["neutral", "happy", "sad", "surprised", "relaxed"];
+
+export function isEmotion(value: unknown): value is Emotion {
+  return EMOTIONS.includes(value as Emotion);
+}
+
 export interface ChatRequest {
   sessionId: string;
   text: string;
@@ -21,6 +30,7 @@ export interface Usage {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  webSearches: number;
 }
 
 export type ChatErrorCode = "auth" | "rate_limit" | "overloaded" | "network" | "bad_request" | "api";
@@ -32,8 +42,11 @@ export type ChatEvent =
   | { type: "reset" }
   // Claude switched the conversation language (the user asked for it by voice).
   | { type: "lang"; lang: Lang }
-  // A complete, speakable chunk of the reply (also contained in the deltas).
-  | { type: "sentence"; index: number; text: string }
+  // A complete, speakable chunk of the reply (also contained in the deltas),
+  // with the mood Claude marked for it, if it changes here.
+  | { type: "sentence"; index: number; text: string; emotion?: Emotion }
+  // Claude is searching the web (query is null when it isn't known).
+  | { type: "search"; query: string | null }
   | {
       type: "done";
       stopReason: string | null;

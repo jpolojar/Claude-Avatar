@@ -3,11 +3,13 @@ import {
   isLang,
   isServerTtsEngine,
   type ChatEvent,
+  type Emotion,
   type HealthResponse,
   type SttResponse,
 } from "../shared/protocol.js";
 import { classifyError, streamReply } from "./claude.js";
 import { config } from "./config.js";
+import { emotionChar, takeEmotion } from "./markers.js";
 import { SentenceSplitter } from "./sentences.js";
 import { clearMemory, currentMemory, getMemory, loadMemory, summarizeSession } from "./memory.js";
 import { findSession, getSession, type Session } from "./session.js";
@@ -84,10 +86,19 @@ app.post("/api/chat", async (req, res) => {
   let firstSentenceMs: number | null = null;
   let splitter = new SentenceSplitter();
   let sentenceIndex = 0;
+  // A mood marked where no sentence follows yet carries over to the next one.
+  let carriedEmotion: Emotion | null = null;
   const sendSentences = (chunks: string[]) => {
     for (const chunk of chunks) {
+      const { text: sentence, emotion } = takeEmotion(chunk);
+      const mood = emotion ?? carriedEmotion;
+      if (!sentence) {
+        carriedEmotion = mood;
+        continue;
+      }
+      carriedEmotion = null;
       firstSentenceMs ??= performance.now() - started;
-      send({ type: "sentence", index: sentenceIndex++, text: chunk });
+      send({ type: "sentence", index: sentenceIndex++, text: sentence, ...(mood ? { emotion: mood } : {}) });
     }
   };
   // Claude's text often arrives in bursts. If a burst ends with what looks
@@ -107,11 +118,22 @@ app.post("/api/chat", async (req, res) => {
         clearTimeout(pauseTimer);
         splitter = new SentenceSplitter();
         sentenceIndex = 0;
+        carriedEmotion = null;
         send({ type: "reset" });
       },
       onLanguage: (newLang) => {
         session.adoptLanguage(newLang);
         send({ type: "lang", lang: newLang });
+      },
+      // The mood travels inside the splitter so it lands on the right sentence.
+      onEmotion: (emotion) => sendSentences(splitter.push(emotionChar(emotion))),
+      onSearch: (query) => {
+        console.log(`[chat] web search: ${query ?? "(no query)"}`);
+        send({ type: "search", query });
+      },
+      onTextPause: () => {
+        clearTimeout(pauseTimer);
+        onStreamPause();
       },
     });
     clearTimeout(pauseTimer);
@@ -128,6 +150,7 @@ app.post("/api/chat", async (req, res) => {
       `[chat] ${session.language} · ${result.aborted ? "aborted" : result.stopReason}` +
         ` · TTFT ${fmtMs(result.ttftMs)} · 1st sentence ${fmtMs(firstSentenceMs)} · total ${fmtMs(result.totalMs)}` +
         (u ? ` · in ${u.inputTokens} (cache read ${u.cacheReadTokens}, write ${u.cacheWriteTokens}) out ${u.outputTokens}` : "") +
+        (u?.webSearches ? ` · ${u.webSearches} web search(es)` : "") +
         ` · ${result.model}`,
     );
 

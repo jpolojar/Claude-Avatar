@@ -11,7 +11,9 @@ const ABBREVIATIONS = new Set([
 
 const TERMINATORS = ".!?…";
 const CLOSERS = `.!?…"'”’)»`;
-const OPENERS = `"“'‘(«`;
+// Emotion marks (see markers.ts) sit at the start of the sentence they apply to.
+const OPENERS = `"“'‘(«`;
+const TRAILING_MARKS = /[\s-]*$/;
 
 /** A chunk longer than this is cut at a comma, colon or dash instead. */
 const SOFT_LIMIT = 160;
@@ -44,7 +46,12 @@ export class SentenceSplitter {
    * boundary, speak what is there.
    */
   flushIfComplete(): string[] {
-    return looksComplete(this.buffer.trimEnd()) ? this.flush() : [];
+    // An emotion mark after the sentence belongs to the next one: leave it buffered.
+    const body = this.buffer.slice(0, TRAILING_MARKS.exec(this.buffer)!.index);
+    if (!looksComplete(body)) return [];
+    const chunks: string[] = [];
+    this.emit(chunks, body.length);
+    return chunks;
   }
 
   /** Returns whatever is left when the reply ends. */

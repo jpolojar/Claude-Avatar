@@ -1,9 +1,10 @@
+import type { Emotion } from "../../../shared/protocol";
 import { isAbortError } from "../api";
 import type { Clip } from "./engine";
 
 export interface QueueHooks {
-  /** A clip starts playing; index counts clips actually played. */
-  onClipStart(clip: Clip, index: number): void;
+  /** A clip starts playing; index counts clips actually played. emotion is set when the mood changes here. */
+  onClipStart(clip: Clip, index: number, emotion: Emotion | undefined): void;
   onClipEnd(): void;
   /** Synthesis failed for a sentence (it is skipped). */
   onError(error: unknown): void;
@@ -12,14 +13,24 @@ export interface QueueHooks {
 /** Sentences synthesized ahead of the one playing (at most two requests in flight). */
 const LOOKAHEAD = 1;
 
+interface Pending {
+  text: string;
+  emotion: Emotion | undefined;
+}
+
+interface Prepared {
+  clip: Clip;
+  emotion: Emotion | undefined;
+}
+
 /**
  * Speaks sentences in order as they arrive. The next sentences are
  * synthesized while the current one plays, so speech starts with the first
  * sentence and continues without waiting for the rest of the reply.
  */
 export class SpeechQueue {
-  private readonly pending: string[] = [];
-  private readonly preparing: Promise<Clip | null>[] = [];
+  private readonly pending: Pending[] = [];
+  private readonly preparing: Promise<Prepared | null>[] = [];
   private readonly heard: string[] = [];
   private closed = false;
   private wake: (() => void) | null = null;
@@ -35,9 +46,9 @@ export class SpeechQueue {
     this.done = this.run();
   }
 
-  push(text: string): void {
+  push(text: string, emotion?: Emotion): void {
     if (this.closed || this.signal.aborted) return;
-    this.pending.push(text);
+    this.pending.push({ text, emotion });
     this.fill();
     this.wake?.();
   }
@@ -55,12 +66,15 @@ export class SpeechQueue {
 
   private fill(): void {
     while (this.preparing.length < LOOKAHEAD && this.pending.length > 0) {
-      const text = this.pending.shift()!;
+      const { text, emotion } = this.pending.shift()!;
       this.preparing.push(
-        this.prepare(text, this.signal).catch((err: unknown) => {
-          if (!isAbortError(err)) this.hooks.onError(err);
-          return null;
-        }),
+        this.prepare(text, this.signal).then(
+          (clip) => ({ clip, emotion }),
+          (err: unknown) => {
+            if (!isAbortError(err)) this.hooks.onError(err);
+            return null;
+          },
+        ),
       );
     }
   }
@@ -76,11 +90,11 @@ export class SpeechQueue {
         continue;
       }
       this.fill(); // start synthesizing the following sentence while this one plays
-      const clip = await next;
-      if (!clip || this.signal.aborted) continue;
-      this.hooks.onClipStart(clip, index++);
+      const prepared = await next;
+      if (!prepared || this.signal.aborted) continue;
+      this.hooks.onClipStart(prepared.clip, index++, prepared.emotion);
       try {
-        const result = await clip.play(this.signal);
+        const result = await prepared.clip.play(this.signal);
         if (result.spokenText) this.heard.push(result.spokenText);
       } finally {
         this.hooks.onClipEnd();

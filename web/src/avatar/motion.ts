@@ -1,5 +1,6 @@
 // Small procedural motions that keep the avatar alive: blinking, glances,
 // and per-state head poses and expressions.
+import type { Emotion } from "../../../shared/protocol";
 import type { AppState } from "../app";
 
 const random = (min: number, max: number) => min + Math.random() * (max - min);
@@ -78,6 +79,19 @@ export const STATE_POSES: Record<AppState, StatePose> = {
     gaze: { x: 0, y: 0 },
     expressions: { happy: 0.15 },
   },
+};
+
+/** Every mood expression the avatar uses; each is driven every frame so it can fade out. */
+export const MOOD_EXPRESSIONS = ["happy", "sad", "surprised", "relaxed"] as const;
+
+/** Face and head for a mood Claude marked; added on top of the state pose (neutral = state pose only). */
+export const EMOTION_POSES: Record<Exclude<Emotion, "neutral">, Pick<StatePose, "head" | "expressions">> = {
+  happy: { head: { x: -0.02, y: 0, z: 0.05 }, expressions: { happy: 0.55 } },
+  // Head drops a little; no smile.
+  sad: { head: { x: 0.08, y: 0, z: -0.03 }, expressions: { sad: 0.6 } },
+  // Head pulls back.
+  surprised: { head: { x: -0.06, y: 0, z: 0 }, expressions: { surprised: 0.6 } },
+  relaxed: { head: { x: 0.02, y: 0, z: 0.04 }, expressions: { relaxed: 0.45 } },
 };
 
 /** Slow, organic drift: sum of incommensurate sines in -1..1. */
