@@ -1,111 +1,114 @@
-# Avatar
+<img src="assets/avatar-icon.png" width="128" align="right" alt="Avatar icon">
 
-Selainpohjainen puhuva avatar, jonka kanssa keskustellaan äänellä suomeksi tai englanniksi. Aivoina toimii Claude API (Opus 5.5). API-avain pysyy Node-palvelimella eikä päädy selaimeen.
+# Claude Avatar
 
-Toteutussuunnitelma vaiheineen on tiedostossa `.claude\plans\dreamy-weaving-otter.md`.
+A talking 3D avatar in the browser that you chat with by voice, in Finnish or English. Claude (Opus 5.5) is the brain; everything else (speech recognition, speech synthesis, the 3D avatar) is free. The API key stays on a small Node server and never reaches the browser.
 
-## Tila
+The user interface and the avatar's persona are in Finnish; the avatar speaks both Finnish and English and switches when asked.
 
-| Vaihe | Sisältö | Tila |
-|---|---|---|
-| a | Mikki → teksti → Claude → teksti ruudulle | ✅ valmis |
-| b | Clauden vastaus puheeksi (edge-tts Noora, varalla selaimen ääni) | ✅ valmis |
-| c | 3D-avatar (VRM) ja huulisynkka | ✅ valmis |
-| d | Streaming ja lausepätkitys | ✅ valmis |
-| e | Barge-in, aina päällä -tila, muisti ja viimeistely | ✅ valmis |
+## Features
 
-## Käyttöönotto
+- **Voice chat:** push-to-talk (hold Space) or always-on listening, where talking over the avatar interrupts it.
+- **Low latency:** Claude's reply is split into sentences while it streams, and speech starts with the first finished sentence.
+- **3D avatar:** a VRM model with blinking, breathing, head and eye movement, state poses (listening, thinking, speaking) and lip sync from the audio signal.
+- **Emotions:** Claude marks the mood of each sentence and the avatar's face follows it (happy, sad, surprised, relaxed, neutral).
+- **Web search:** current information such as weather or news through Claude's web search tool.
+- **Memory:** the avatar remembers you between conversations.
+- **Interruptions:** Claude learns exactly how far you listened before cutting it off, down to the word, and does not repeat itself.
 
-Tarvitset Node.js 22.9:n tai uudemman (Node 24 on testattu) sekä Microsoft Edgen.
+## Requirements
 
-1. Asenna riippuvuudet:
+- Node.js 22.9 or newer (Node 24 tested)
+- Microsoft Edge (Chrome also works for push-to-talk, but has no Finnish neural voice)
+- A Claude API key
+- Optional: an NVIDIA GPU for local Whisper (always-on listening)
+
+The desktop shortcut and the Whisper instructions below are for Windows.
+
+## Setup
+
+1. Install the dependencies:
    ```
    npm install
    ```
-2. Kopioi `.env.example` tiedostoksi `.env` ja lisää Claude API -avain kohtaan `ANTHROPIC_API_KEY`.
-3. Valinnainen: aina päällä -kuuntelua varten asenna Whisper (katso alla).
-4. Käynnistä palvelin, käyttöliittymä ja Whisper (jos se on asennettu):
+2. Copy `.env.example` to `.env` and put your Claude API key in `ANTHROPIC_API_KEY`.
+3. Download an avatar model (see [Avatar](#avatar)).
+4. Optional: install Whisper for always-on listening (see [Whisper](#whisper-always-on-listening)).
+5. Start the server, the web app and Whisper (if installed):
    ```
    npm run dev
    ```
-5. Avaa Edgessä osoite http://localhost:5173 ja salli mikrofoni, kun selain kysyy.
+6. Open http://localhost:5173 in Edge and allow the microphone.
 
-### Työpöydän pikakuvake
+### Desktop shortcut (Windows)
 
-Projektikansiossa on `Avatar.lnk`, jonka voit kopioida työpöydälle. Pikakuvake toimii näin:
-
-- Jos Avatar ei ole käynnissä, se käynnistää `npm run dev` -komennon pienennettyyn "Avatar"-ikkunaan tehtäväpalkkiin, odottaa palvelimen heräämistä ja avaa sivun Edgessä. Kylmäkäynnistys kestää noin 10 sekuntia.
-- Jos Avatar on jo käynnissä, se avaa Edgen heti.
-- Avatar sammuu, kun suljet "Avatar"-ikkunan.
-
-Pikakuvakkeessa on polut tähän koneeseen, joten se ei ole gitissä. Voit luoda sen uudelleen komennolla:
+`scripts\create-shortcut.ps1` creates `Avatar.lnk` in the project folder; copy it to your desktop:
 
 ```
 powershell -ExecutionPolicy Bypass -File scripts\create-shortcut.ps1
 ```
 
-Kuvake (`assets/avatar.ico`) on renderöity avatar-mallista.
+- If the avatar isn't running, the shortcut starts `npm run dev` in a minimized "Avatar" console window, waits for the server and opens the page in Edge (about 10 seconds from cold).
+- If it is already running, Edge opens right away.
+- Closing the "Avatar" window stops everything.
 
-## Käyttö
+The shortcut contains paths on your machine, so it is not committed. Its icon (`assets/avatar.ico`) is rendered from the avatar model.
 
-- **Puhetapa** valitaan yläpalkista:
-  - **Välilyönti:** pidä välilyöntiä pohjassa, puhu ja päästä irti. Tunnistus tapahtuu selaimessa (Web Speech).
-  - **Aina päällä:** puhu milloin vain. Avatar huomaa puheen itse (Silero VAD) ja tunnistaa sen paikallisella Whisperillä. Kun aloitat puhumisen avatarin puheen päälle, se lopettaa ja kuuntelee. Välilyönti tai Keskeytä-painike keskeyttää avatarin myös tässä tilassa.
-- **Kirjoittaminen:** voit aina kirjoittaa viestin myös tekstikenttään.
-- **Keskeytys:** Claude saa seuraavalla vuorolla tiedon siitä, mihin kohtaan sen vastaus keskeytyi, sanan tarkkuudella, eikä se toista keskeytettyä vastausta.
-- **Kieli:** valinta vaihtaa puheentunnistuksen ja Clauden vastauskielen. Kielen voi vaihtaa myös pyytämällä, esimerkiksi sanomalla "puhutaanko englantia".
-- **Uusi keskustelu** tyhjentää historian ja tallentaa edellisestä keskustelusta muistiinpanot.
-- **Tunneilmeet:** Claude merkitsee vastauksensa sävyn lause kerrallaan (ilo, suru, yllättyminen, rauhallisuus tai neutraali), ja avatarin ilme vaihtuu juuri, kun kyseinen lause alkaa kuulua. Merkinnät eivät näy eivätkä kuulu. Puheen jälkeen ilme palaa muutaman sekunnin päästä neutraaliksi.
-- **Verkkohaku:** Claude voi hakea verkosta ajankohtaista tietoa, kuten säätä, uutisia tai aukioloaikoja.
-  - Kun haku alkaa, avatar sanoo lyhyen täytelauseen, esimerkiksi "Hetki, katson.", ja odottaa ajatteluasennossa. Tilarivillä näkyy hakusana.
-  - Tulos kerrotaan lyhyesti haun jälkeen.
-  - Täytelauseen sanoo sovellus, ei Claude, koska Opus 5.5 ei puhu ennen työkalukutsua: se muuttaa sellaisen tekstin näkymättömiksi edistymismerkinnöiksi.
-  - Haku käyttää Clauden omaa web search -työkalua, enintään 3 hakua per vuoro. Se maksaa Claude API:n hinnaston mukaan noin sentin per haku sekä hakutulosten tokenit.
-  - Asetus `AVATAR_WEB_SEARCH`: `fast` (oletus) on tavallinen haku. `thorough` suodattaa tulokset ensin koodilla, mikä on tarkempi sekaville sivuille mutta selvästi hitaampi. Ensimmäisessä testissä vastaus alkoi vasta 12,6 sekunnin kohdalla. `off` poistaa haun käytöstä.
-- **Muisti:** avatar muistaa sinut keskustelusta toiseen. Kun aloitat uuden keskustelun, suljet sivun tai olet kymmenen minuuttia hiljaa, Claude tiivistää olennaisen (enintään 200 sanaa) tiedostoon `data/memory.json`. Tiivistelmä annetaan avatarille seuraavan keskustelun alussa. Muisti-paneelista näet, mitä se muistaa, ja voit tyhjentää muistin. Tiedostoa voi myös muokata käsin.
-- **Tilarivi** näyttää viiveet mitattuna siitä, kun viesti lähti: puheentunnistus (STT), Clauden ensimmäinen sana, ensimmäinen valmis lause, äänen alku (sekä ensimmäisen lauseen synteesiaika) ja tokenimäärät.
+## Usage
 
-### Miten viive pidetään pienenä
+- **Listening mode** (top bar):
+  - **Välilyönti (Space):** hold Space, speak, release. Recognition runs in the browser (Web Speech).
+  - **Aina päällä (always on):** just talk. Voice activity detection (Silero VAD) notices speech and local Whisper transcribes it. Talking over the avatar stops it and it listens; Space or the Keskeytä (stop) button interrupts it too.
+- **Typing:** you can always type a message instead.
+- **Language:** the language menu switches speech recognition and Claude's reply language. You can also just ask, e.g. "can we speak English?".
+- **Uusi keskustelu (new conversation)** clears the history and saves memory notes from the previous one.
+- **Emotions:** Claude tags its sentences with a mood; the avatar's expression changes exactly when that sentence starts playing and fades back to neutral a few seconds after it stops talking. The tags are never shown or spoken.
+- **Web search:**
+  - When a search starts the avatar says a short filler ("Hetki, katson." / "One moment, let me check.") and waits in its thinking pose; the status line shows the query. The answer follows briefly once the search is done.
+  - The app speaks the filler, not Claude: Opus 5.5 does not produce visible text before a tool call (it turns such text into hidden progress notes).
+  - Uses Claude's web search tool, at most 3 searches per turn. Billed per Claude API pricing: about one cent per search plus the tokens of the results.
+  - `AVATAR_WEB_SEARCH`: `fast` (default) is a plain search. `thorough` filters the results with code first, which is more accurate on messy pages but noticeably slower (in the first test the answer began only after 12.6 s). `off` disables search.
+- **Memory:** when you start a new conversation, close the page or stay quiet for ten minutes, Claude folds what is worth remembering (at most 200 words) into `data/memory.json`. The note is given to the avatar at the start of the next conversation. The Muisti (memory) panel shows it and can clear it; you can also edit the file by hand.
+- **Status line:** latencies measured from sending the message: speech recognition (STT), Claude's first word, the first finished sentence, start of audio (with the synthesis time of the first sentence), tokens and web searches.
 
-Palvelin pilkkoo Clauden vastauksen lauseiksi heti, kun lause on valmis (`server/sentences.ts`). Selain syntetisoi ensimmäisen lauseen samalla, kun Claude vielä kirjoittaa, ja seuraavan lauseen sillä aikaa, kun edellinen soi (`web/src/tts/queue.ts`).
+### Keeping latency low
 
-- **Lauseraja:** lyhenteet (esim., mm., klo, Dr. …), nimikirjaimet, päivämäärät ja järjestysluvut eivät katkaise lausetta.
-- **Pitkät lauseet:** pitkä lause katkaistaan pilkun kohdalta, ensimmäinen jo noin 80 merkin jälkeen.
-- **Hiljaisuuden leikkaus:** Edgen äänitiedostojen alku- ja loppuhiljaisuus leikataan pois, ja lauseiden väliin jätetään noin 0,2 sekunnin tauko.
+The server splits Claude's reply into sentences as soon as each one is certain (`server/sentences.ts`). The browser synthesizes the first sentence while Claude is still writing, and the next one while the previous one plays (`web/src/tts/queue.ts`).
 
-Mockilla mitattuna (ensimmäinen sana 1,2 s) ääni alkaa noin 1,7 sekunnissa, kun aiemmin se alkoi vasta, kun koko vastaus oli valmis ja syntetisoitu.
+- **Sentence boundaries:** abbreviations (esim., mm., klo, Dr., …), initials, dates and ordinals do not end a sentence.
+- **Long sentences** are cut at a comma; the first one already after about 80 characters.
+- **Stream pauses:** if Claude's text pauses after what looks like a finished sentence, it is spoken without waiting for the next word.
+- **Silence trimming:** Edge's leading and trailing silence is trimmed, leaving a pause of about 0.2 s between sentences.
 
 ## Avatar
 
-Avatar on VRM-malli tiedostossa `web/public/models/avatar.vrm`, ja se näytetään [three-vrm](https://github.com/pixiv/three-vrm)-kirjastolla. Tiedosto ei ole gitissä. Oletusmallina on three-vrm:n esimerkkihahmo `VRM1_Constraint_Twist_Sample.vrm` (© pixiv Inc., [VRM Public License 1.0](https://vrm.dev/licenses/1.0/)). Lataa se näin:
+The avatar is a VRM model at `web/public/models/avatar.vrm`, rendered with [three-vrm](https://github.com/pixiv/three-vrm). The file is not committed. The default is three-vrm's sample character `VRM1_Constraint_Twist_Sample.vrm` (© pixiv Inc., [VRM Public License 1.0](https://vrm.dev/licenses/1.0/)):
 
 ```
 curl -L -o web/public/models/avatar.vrm https://raw.githubusercontent.com/pixiv/three-vrm/dev/packages/three-vrm/examples/models/VRM1_Constraint_Twist_Sample.vrm
 ```
 
-**Oma malli:** tallenna mikä tahansa VRM-tiedosto (0.x tai 1.0) samalla nimellä ja lataa sivu uudelleen. Malleja saa esimerkiksi [VRoid Hubista](https://hub.vroid.com/), kun käyttöehdot sallivat sen, tai voit tehdä oman ilmaisella [VRoid Studiolla](https://vroid.com/studio).
+**Your own model:** save any VRM file (0.x or 1.0) under the same name and reload the page. You can find models on [VRoid Hub](https://hub.vroid.com/) (check each model's terms) or make one with the free [VRoid Studio](https://vroid.com/studio).
 
-Avatar toimii näin:
+- **Idle life:** blinking, breathing, slow head drift and occasional eye saccades.
+- **States:** listening tilts the head toward you with a smile; thinking looks up and to the side; speaking nods along with the voice.
+- **Lip sync:** with the Edge and Piper voices the mouth follows the loudness of the audio, and the vowel shape (a, e, i, o, u) comes from its spectral brightness. The browser's own voice cannot be analysed, so its mouth movement is approximated.
 
-- **Elävyys:** silmät räpyttelevät, rintakehä hengittää, pää liikkuu hitaasti ja katse hypähtelee välillä.
-- **Tilat:** kuunnellessa pää kallistuu kohti ja kasvoilla on hymy. Ajatellessa katse kääntyy ylös ja sivulle. Puhuessa pää nyökkäilee äänen tahdissa.
-- **Huulisynkka:** Edge- ja Piper-äänillä suu liikkuu äänen voimakkuuden mukaan, ja vokaali (a, e, i, o, u) valitaan äänen kirkkaudesta. Selaimen oma ääni ei kulje sivun kautta, joten silloin suu liikkuu arvioidusti.
+## Voices
 
-## Ääni
+Open **Ääniasetukset** (voice settings) at the top of the page. Three speech engines:
 
-Avaa **Ääniasetukset** sivun yläosasta. Voit valita kolmesta puhemoottorista:
-
-| Moottori | Kuvaus |
+| Engine | Description |
 |---|---|
-| **Edge-neuroääni** (oletus) | Microsoftin Noora (suomi) sekä Ava tai Emma (englanti) Node-palvelimen kautta ([msedge-tts](https://github.com/Migushthe2nd/MsEdgeTTS)). Ääni tulee tiedostona sanakohtaisine ajoituksineen, joten huulisynkka ja kaiunpoisto toimivat. Rajapinta on Microsoftin epävirallinen ja voi joskus muuttua. Silloin sovellus vaihtaa automaattisesti selaimen omaan ääneen ja kertoo siitä. |
-| **Selaimen oma ääni** | Edgen oma Noora Online (Natural) -ääni. Virallinen ja aina saatavilla, mutta huulisynkka on vain arvio, eikä kaiunpoisto koske sitä. |
-| **Piper (offline)** | Valinnainen. Paikallinen miesääni Harri, jos haluat toimia täysin ilman verkkoa. Asennus erikseen, katso alta. |
+| **Edge neural voice** (default) | Microsoft's Noora (Finnish) and Ava or Emma (English) via the Node server ([msedge-tts](https://github.com/Migushthe2nd/MsEdgeTTS)). Audio arrives as a file with word timings, so lip sync and echo cancellation work. This is an unofficial Microsoft endpoint that may change; if it fails, the app falls back to the browser's own voice and says so. |
+| **Browser voice** | Edge's own Noora Online (Natural) voice. Official and always available, but lip sync is approximate and echo cancellation does not cover it. |
+| **Piper (offline)** | Optional local male voice (Harri) if you want to work entirely offline. Installed separately, see below. |
 
-**Ava (monikielinen)** puhuu sekä suomea että englantia samalla äänellä, jos haluat avatarille yhden äänen kummallekin kielelle.
+**Ava (monikielinen / multilingual)** speaks both Finnish and English in the same voice, if you want one voice for both languages.
 
-**Kaikutesti** soittaa näytteen kaiuttimista kahdesti ja mittaa, kuinka paljon avatarin ääni kuuluu mikrofoniin kaiunpoiston kanssa ja ilman. Tulos kertoo, toimiiko äänellä keskeyttäminen kaiuttimilla vaiheessa e. Ole testin ajan hiljaa.
+**Kaikutesti (echo test)** plays a sample through the speakers twice and measures how much of the avatar's voice reaches the microphone with and without echo cancellation, which tells whether voice interruptions can work on speakers. Stay quiet during the test.
 
-### Piper (valinnainen)
+### Piper (optional)
 
 ```
 pip install piper-tts[http]
@@ -113,13 +116,13 @@ python -m piper.download_voices fi_FI-harri-medium
 python -m piper.http_server -m fi_FI-harri-medium
 ```
 
-Palvelin löytää Piperin osoitteesta `http://127.0.0.1:5000` (muutettavissa muuttujalla `AVATAR_PIPER_URL`). Lataa sivu uudelleen, niin Piper tulee valittavaksi.
+The server looks for Piper at `http://127.0.0.1:5000` (`AVATAR_PIPER_URL`). Reload the page and Piper becomes selectable.
 
-## Whisper (aina päällä -kuuntelu)
+## Whisper (always-on listening)
 
-Aina päällä -tila tarvitsee paikallisen [whisper.cpp](https://github.com/ggml-org/whisper.cpp)-palvelimen. Selaimen Web Speech ei käy tähän, koska se avaa mikrofonin itse eikä käytä sovelluksen kaiunpoistettua äänivirtaa. Kaiuttimilla avatarin oma ääni kuuluisi silloin tunnistukseen.
+Always-on listening needs a local [whisper.cpp](https://github.com/ggml-org/whisper.cpp) server. The browser's Web Speech API won't do: it opens the microphone itself instead of using the app's echo-cancelled stream, so on speakers it would hear the avatar.
 
-Asennus Windowsille ja NVIDIA-näytönohjaimelle (noin 1,2 Gt):
+Install on Windows with an NVIDIA GPU (about 1.2 GB):
 
 ```
 mkdir local\whisper\bin
@@ -128,47 +131,54 @@ tar -xf local/whisper/whisper.zip -C local/whisper/bin
 curl -L -o local/whisper/ggml-large-v3-turbo-q5_0.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
 ```
 
-Purkamisen jälkeen ohjelman pitää löytyä polusta `local/whisper/bin/Release/whisper-server.exe`. Jos se on eri paikassa, aseta polku muuttujaan `AVATAR_WHISPER_BIN`.
+The server binary should end up at `local/whisper/bin/Release/whisper-server.exe`; otherwise set `AVATAR_WHISPER_BIN`.
 
-`npm run dev` käynnistää Whisperin automaattisesti, jos tiedostot löytyvät. Ilman niitä kaikki muu toimii normaalisti. Mallin lataus kestää muutaman sekunnin, ja "Aina päällä" tulee valittavaksi, kun Whisper on valmis. RTX 4070 SUPERilla viiden sekunnin suomenkielinen lause tunnistuu noin 0,2 sekunnissa.
+`npm run dev` starts Whisper automatically when the files are there; without them everything else works as usual. Loading the model takes a few seconds, and "Aina päällä" becomes selectable once Whisper is ready. On an RTX 4070 SUPER a five-second Finnish sentence is transcribed in about 0.2 s.
 
-Säädöt löytyvät tiedostosta `web/src/stt/vad-listener.ts`:
+Tuning lives in `web/src/stt/vad-listener.ts`:
 
-- **Puheen loppu:** 0,8 sekunnin hiljaisuus päättää puheenvuoron.
-- **Avatarin puhuessa:** keskeytykseen vaaditaan selvempää puhetta (kynnys 0,75) ja vähintään 0,4 sekuntia, ettei kaiun jäänne keskeytä avataria.
+- **End of speech:** 0.8 s of silence ends your turn.
+- **While the avatar speaks:** interrupting needs clearer speech (threshold 0.75) for at least 0.4 s, so leftover echo cannot interrupt the avatar.
 
-## Asetukset (`.env`)
+## Configuration (`.env`)
 
-| Muuttuja | Oletus | Selitys |
+| Variable | Default | Description |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | – | Claude API -avain |
-| `AVATAR_MODEL` | `claude-opus-5-5` | Claude-malli |
-| `AVATAR_EFFORT` | `low` | `low` / `medium` / `high` / `xhigh` / `max`. Matala effort antaa nopeimman vastauksen |
-| `AVATAR_PORT` | `3001` | Node-palvelimen portti |
-| `AVATAR_PIPER_URL` | `http://127.0.0.1:5000` | Piper-palvelimen osoite (valinnainen) |
-| `AVATAR_DATA_DIR` | `data` | Kansio, jossa muisti (`memory.json`) on |
-| `AVATAR_WEB_SEARCH` | `fast` | `fast` (tavallinen haku), `thorough` (tulokset suodatetaan koodilla, hitaampi) tai `off` |
-| `AVATAR_COUNTRY` | `FI` | Likimääräinen sijainti verkkohakuja varten (maakoodi) |
-| `AVATAR_TIMEZONE` | `Europe/Helsinki` | Aikavyöhyke verkkohakuja varten |
-| `AVATAR_CITY` | – | Valinnainen kotikaupunki, esimerkiksi `Tampere`, jotta sää ja paikalliset haut osuvat oikein |
-| `AVATAR_WHISPER_PORT` | `8178` | Whisper-palvelimen portti |
-| `AVATAR_WHISPER_BIN` | `local/whisper/bin/Release/whisper-server.exe` | whisper-server-ohjelman polku |
-| `AVATAR_WHISPER_MODEL` | `local/whisper/ggml-large-v3-turbo-q5_0.bin` | Whisper-malli |
+| `ANTHROPIC_API_KEY` | – | Claude API key |
+| `AVATAR_MODEL` | `claude-opus-5-5` | Claude model |
+| `AVATAR_EFFORT` | `low` | `low` / `medium` / `high` / `xhigh` / `max`; low gives the fastest replies |
+| `AVATAR_PORT` | `3001` | Port of the Node server |
+| `AVATAR_PIPER_URL` | `http://127.0.0.1:5000` | Piper server (optional) |
+| `AVATAR_DATA_DIR` | `data` | Folder for the memory file (`memory.json`) |
+| `AVATAR_WEB_SEARCH` | `fast` | `fast` (plain search), `thorough` (results filtered by code, slower) or `off` |
+| `AVATAR_COUNTRY` | `FI` | Approximate location for web search (country code) |
+| `AVATAR_TIMEZONE` | `Europe/Helsinki` | Time zone for web search |
+| `AVATAR_CITY` | – | Optional home city, e.g. `Tampere`, for local weather and search results |
+| `AVATAR_WHISPER_PORT` | `8178` | Port of the Whisper server |
+| `AVATAR_WHISPER_BIN` | `local/whisper/bin/Release/whisper-server.exe` | Path to whisper-server |
+| `AVATAR_WHISPER_MODEL` | `local/whisper/ggml-large-v3-turbo-q5_0.bin` | Whisper model |
 
-Muuttujilla on `AVATAR_`-etuliite, koska Node ei ylikirjoita `.env`-tiedostosta muuttujia, jotka on jo asetettu komentotulkissa. Esimerkiksi `CLAUDE_EFFORT` voi olla jo valmiiksi asetettuna.
+The variables have an `AVATAR_` prefix because Node's `--env-file` never overrides variables already set in the shell, and generic names such as `CLAUDE_EFFORT` are often set by other tools.
 
-Palvelin käyttää Clauden palvelinpuolen varamallia (`fallbacks: "default"`). Jos malli kieltäytyy vastaamasta, API yrittää automaattisesti toisella mallilla.
+The server uses Claude's server-side fallbacks (`fallbacks: "default"`): if the model declines a request, the API retries it on another model.
 
-## Kehitys
+## Development
 
 ```
-npm run typecheck   # TypeScript-tarkistus palvelimelle ja selaimelle
-npm test            # yksikkötestit
+npm run typecheck   # TypeScript checks for the server and the web app
+npm test            # unit tests
 ```
 
-Rakenne:
+Layout:
 
-- `server/`: Express-palvelin. Tiedosto `claude.ts` hoitaa Claude-streamauksen, `sentences.ts` lausepilkkojan, `markers.ts` kieli- ja tunnemerkinnät, `session.ts` keskusteluhistorian ja keskeytykset, `memory.ts` muistin, `stt.ts` Whisper-tunnistuksen ja `persona.md` persoonan.
-- `scripts/whisper.mjs` käynnistää whisper.cpp-palvelimen osana `npm run dev` -komentoa. Kansiossa `tts/` ovat puhesynteesimoottorit (edge, piper).
-- `web/`: Vite- ja TypeScript-käyttöliittymä. Tiedosto `app.ts` sisältää tilakoneen ja keskustelun kulun, `stt/` puheentunnistuksen (Web Speech ja VAD + Whisper), `tts/` puhemoottorit ja varaäänilogiikan, `audio/` Web Audio -ketjun, huulisynkan ja kaikutestin, `avatar/` 3D-avatarin ja sen liikkeet sekä `ui/` näkymät. Kehitystilassa avatar on konsolissa muuttujana `avatar`, esimerkiksi `avatar.setState("thinking")`.
-- `shared/protocol.ts`: palvelimen ja selaimen yhteinen viestimuoto (NDJSON).
+- `server/`: the Express server. `claude.ts` streams from Claude (with web search), `sentences.ts` splits the reply into sentences, `markers.ts` handles the language and emotion markers, `session.ts` keeps the conversation and interruptions, `memory.ts` the long-term memory, `stt.ts` talks to Whisper, `tts/` holds the speech engines (Edge, Piper), and `persona.md` is the avatar's persona (in Finnish).
+- `scripts/`: `whisper.mjs` starts whisper.cpp as part of `npm run dev`; `start-avatar.ps1` and `create-shortcut.ps1` are the Windows launcher.
+- `web/`: the Vite + TypeScript web app. `app.ts` is the state machine and conversation flow, `stt/` speech recognition (Web Speech, VAD + Whisper), `tts/` the speech engines, fallback and sentence queue, `audio/` the Web Audio graph, lip sync and echo test, `avatar/` the 3D avatar and its motion, and `ui/` the views and (Finnish) UI strings. In dev mode the avatar is available in the console as `avatar`, e.g. `avatar.setState("thinking")`.
+- `shared/protocol.ts`: the wire format shared by the server and the browser (NDJSON).
+
+## Credits
+
+- [Claude](https://www.anthropic.com/claude) by Anthropic
+- [three.js](https://threejs.org/) and [three-vrm](https://github.com/pixiv/three-vrm) (pixiv)
+- Avatar sample model and icon source: `VRM1_Constraint_Twist_Sample` © pixiv Inc., VRM Public License 1.0
+- [msedge-tts](https://github.com/Migushthe2nd/MsEdgeTTS), [vad-web / Silero VAD](https://github.com/ricky0123/vad), [whisper.cpp](https://github.com/ggml-org/whisper.cpp), [Piper](https://github.com/OHF-Voice/piper1-gpl)
