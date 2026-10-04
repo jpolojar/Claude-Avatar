@@ -2,7 +2,7 @@
 
 Selainpohjainen puhuva avatar, jonka kanssa keskustellaan äänellä suomeksi tai englanniksi. Aivoina toimii Claude API (Opus 5.5). API-avain pysyy Node-palvelimella eikä päädy selaimeen.
 
-Toteutussuunnitelma vaiheineen on tiedostossa `C:\Users\jpolo\.claude\plans\dreamy-weaving-otter.md`.
+Toteutussuunnitelma vaiheineen on tiedostossa `.claude\plans\dreamy-weaving-otter.md`.
 
 ## Tila
 
