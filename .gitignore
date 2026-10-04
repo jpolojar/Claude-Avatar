@@ -5,3 +5,4 @@ data/
 local/
 web/public/models/*.vrm
 *.log
+Avatar.lnk

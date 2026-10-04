@@ -30,6 +30,22 @@ Tarvitset Node.js 22.9:n tai uudemman (Node 24 on testattu) sekä Microsoft Edge
    ```
 5. Avaa Edgessä osoite http://localhost:5173 ja salli mikrofoni, kun selain kysyy.
 
+### Työpöydän pikakuvake
+
+Projektikansiossa on `Avatar.lnk`, jonka voit kopioida työpöydälle. Pikakuvake toimii näin:
+
+- Jos Avatar ei ole käynnissä, se käynnistää `npm run dev` -komennon pienennettyyn "Avatar"-ikkunaan tehtäväpalkkiin, odottaa palvelimen heräämistä ja avaa sivun Edgessä. Kylmäkäynnistys kestää noin 10 sekuntia.
+- Jos Avatar on jo käynnissä, se avaa Edgen heti.
+- Avatar sammuu, kun suljet "Avatar"-ikkunan.
+
+Pikakuvakkeessa on polut tähän koneeseen, joten se ei ole gitissä. Voit luoda sen uudelleen komennolla:
+
+```
+powershell -ExecutionPolicy Bypass -File scripts\create-shortcut.ps1
+```
+
+Kuvake (`assets/avatar.ico`) on renderöity avatar-mallista.
+
 ## Käyttö
 
 - **Puhetapa** valitaan yläpalkista:
