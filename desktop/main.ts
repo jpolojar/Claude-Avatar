@@ -2,15 +2,20 @@
 // shows only the character and a speech bubble. The server, Vite and Whisper
 // run beside it (npm run widget). AVATAR_DESKTOP_MODE=window opens the full
 // web app in a normal window instead.
-import { BrowserWindow, Menu, app, ipcMain, screen, session } from "electron";
+import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen, session } from "electron";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { IPC, type DesktopCommand, type MenuState } from "../shared/desktop.js";
+import { IPC, type DesktopCommand, type MenuState, type MicConfig } from "../shared/desktop.js";
+import { registerPushToTalk, unregisterPushToTalk } from "./hotkey.js";
 
 const APP_URL = process.env.AVATAR_WIDGET_URL || "http://localhost:5173";
 const MODE = (process.env.AVATAR_DESKTOP_MODE || "widget").toLowerCase();
 const RETRY_MS = 500;
 const WIDGET_SIZE = { width: 340, height: 520 };
+/** Push-to-talk, as an Electron accelerator. */
+const PTT_KEY = process.env.AVATAR_PTT_KEY || "Control+Space";
+// desktop/dist/main.cjs -> the project root.
+const ICON = join(__dirname, "..", "..", "assets", "avatar.ico");
 
 // Chrome cancels the echo of everything the browser plays (not only WebRTC
 // audio) behind these features; Electron does not get Chrome's field trials,
@@ -33,15 +38,36 @@ interface WidgetState {
   x?: number;
   y?: number;
   alwaysOnTop: boolean;
+  listenMode: "always" | "ptt";
+  muted: boolean;
+  /** Size relative to WIDGET_SIZE; the page is zoomed by the same factor. */
+  scale: number;
 }
+
+const SCALE_PRESETS = [0.5, 0.65, 0.8, 1] as const;
+const MIN_SCALE = 0.4;
+const MAX_SCALE = 1.2;
+const SCALE_STEP = 0.05;
+
+const scaledSize = (scale: number) => ({
+  width: Math.round(WIDGET_SIZE.width * scale),
+  height: Math.round(WIDGET_SIZE.height * scale),
+});
+
+const clampScale = (scale: number) => {
+  const value = Number.isFinite(scale) ? scale : 0.8;
+  return Math.round(Math.min(MAX_SCALE, Math.max(MIN_SCALE, value)) * 100) / 100;
+};
+
+const DEFAULT_STATE: WidgetState = { alwaysOnTop: true, listenMode: "always", muted: false, scale: 0.8 };
 
 const statePath = () => join(app.getPath("userData"), "widget-state.json");
 
 function loadState(): WidgetState {
   try {
-    return { alwaysOnTop: true, ...(JSON.parse(readFileSync(statePath(), "utf8")) as Partial<WidgetState>) };
+    return { ...DEFAULT_STATE, ...(JSON.parse(readFileSync(statePath(), "utf8")) as Partial<WidgetState>) };
   } catch {
-    return { alwaysOnTop: true };
+    return { ...DEFAULT_STATE };
   }
 }
 
@@ -62,7 +88,8 @@ function initialPosition(state: WidgetState): { x: number; y: number } {
     if (visible) return { x: state.x, y: state.y };
   }
   const area = screen.getPrimaryDisplay().workArea;
-  return { x: area.x + area.width - WIDGET_SIZE.width - 24, y: area.y + area.height - WIDGET_SIZE.height };
+  const size = scaledSize(state.scale);
+  return { x: area.x + area.width - size.width - 24, y: area.y + area.height - size.height };
 }
 
 // --- Windows ------------------------------------------------------------------------
@@ -101,7 +128,7 @@ function createFullWindow(): void {
     width: 1280,
     height: 820,
     title: "Avatar",
-    icon: join(app.getAppPath(), "assets", "avatar.ico"),
+    icon: ICON,
     autoHideMenuBar: true,
     backgroundColor: "#12141a",
     webPreferences,
@@ -112,17 +139,19 @@ function createFullWindow(): void {
 
 function createWidget(): void {
   const state = loadState();
+  state.scale = clampScale(state.scale);
   const win = new BrowserWindow({
-    ...WIDGET_SIZE,
+    ...scaledSize(state.scale),
     ...initialPosition(state),
     title: "Avatar",
-    icon: join(app.getAppPath(), "assets", "avatar.ico"),
+    icon: ICON,
     transparent: true,
     backgroundColor: "#00000000",
     frame: false,
     resizable: false,
     maximizable: false,
     hasShadow: false,
+    skipTaskbar: true, // reached from the tray icon instead
     alwaysOnTop: state.alwaysOnTop,
     webPreferences,
   });
@@ -132,11 +161,38 @@ function createWidget(): void {
   win.setIgnoreMouseEvents(true, { forward: true });
   loadWhenReady(win, "widget.html");
 
-  const send = (command: DesktopCommand) => win.webContents.send(IPC.command, command);
+  const send = (command: DesktopCommand) => {
+    if (!win.isDestroyed()) win.webContents.send(IPC.command, command);
+  };
   const remember = () => {
     const [x, y] = win.getPosition();
     saveState({ ...state, x, y });
   };
+
+  // --- Size ---
+
+  // The page is laid out for WIDGET_SIZE and zoomed to the window size.
+  win.webContents.on("did-finish-load", () => win.webContents.setZoomFactor(state.scale));
+
+  /** Resizes the widget around its bottom centre (where the avatar stands). */
+  const applyScale = (scale: number) => {
+    const next = clampScale(scale);
+    if (next === state.scale) return;
+    const { x, y, width, height } = win.getBounds();
+    const size = scaledSize(next);
+    state.scale = next;
+    win.setBounds({
+      x: Math.round(x + (width - size.width) / 2),
+      y: y + height - size.height,
+      ...size,
+    });
+    win.webContents.setZoomFactor(next);
+    remember();
+  };
+
+  ipcMain.on(IPC.scaleBy, (_event, direction: 1 | -1) => applyScale(state.scale + direction * SCALE_STEP));
+
+  // --- Mouse: click-through and dragging ---
 
   ipcMain.on(IPC.setInteractive, (_event, interactive: boolean) => {
     if (interactive) win.setIgnoreMouseEvents(false);
@@ -162,17 +218,75 @@ function createWidget(): void {
     remember();
   });
 
-  ipcMain.on(IPC.showMenu, (_event, menuState: MenuState) => {
+  // --- Microphone and push-to-talk ---
+
+  const ptt = registerPushToTalk(PTT_KEY, {
+    down: () => send({ type: "ptt", down: true }),
+    up: () => send({ type: "ptt", down: false }),
+  });
+  if (!ptt) console.warn(`Push-to-talk key ${PTT_KEY} is taken by another program`);
+
+  const micConfig = (): MicConfig => ({ mode: state.listenMode, muted: state.muted, hotkey: ptt?.label ?? null });
+  const setMic = (patch: Partial<Pick<WidgetState, "listenMode" | "muted">>) => {
+    Object.assign(state, patch);
+    remember();
+    send({ type: "mic", config: micConfig() });
+    updateTray();
+  };
+  ipcMain.handle(IPC.getMicConfig, () => micConfig());
+
+  // --- Menus (right-click on the avatar and the tray icon) ---
+
+  let page: MenuState = { lang: "fi" };
+  ipcMain.on(IPC.reportState, (_event, next: MenuState) => {
+    page = next;
+  });
+
+  const toggleVisible = () => {
+    if (win.isVisible()) win.hide();
+    else win.showInactive();
+  };
+
+  const buildMenu = (fromTray: boolean) =>
     Menu.buildFromTemplate([
+      ...(fromTray
+        ? [{ label: win.isVisible() ? "Piilota avatar" : "Näytä avatar", click: toggleVisible }, { type: "separator" as const }]
+        : []),
       { label: "Keskeytä", click: () => send({ type: "stop" }) },
       { label: "Uusi keskustelu", click: () => send({ type: "newConversation" }) },
       { type: "separator" },
       {
+        label: "Jatkuva kuuntelu",
+        type: "checkbox",
+        checked: state.listenMode === "always",
+        enabled: !state.muted,
+        click: (item) => setMic({ listenMode: item.checked ? "always" : "ptt" }),
+      },
+      {
+        label: "Mykistä mikrofoni",
+        type: "checkbox",
+        checked: state.muted,
+        click: (item) => setMic({ muted: item.checked }),
+      },
+      ptt
+        ? { label: `Puhu: pidä ${ptt.label} pohjassa`, enabled: false }
+        : { label: `Pikanäppäin ${PTT_KEY} on varattu`, enabled: false },
+      { type: "separator" },
+      {
         label: "Kieli",
         submenu: [
-          { label: "Suomi", type: "radio", checked: menuState.lang === "fi", click: () => send({ type: "lang", lang: "fi" }) },
-          { label: "English", type: "radio", checked: menuState.lang === "en", click: () => send({ type: "lang", lang: "en" }) },
+          { label: "Suomi", type: "radio", checked: page.lang === "fi", click: () => send({ type: "lang", lang: "fi" }) },
+          { label: "English", type: "radio", checked: page.lang === "en", click: () => send({ type: "lang", lang: "en" }) },
         ],
+      },
+      {
+        label: "Koko",
+        submenu: SCALE_PRESETS.map((preset) => ({
+          label: `${Math.round(preset * 100)} %`,
+          type: "radio" as const,
+          checked: Math.abs(state.scale - preset) < 0.001,
+          click: () => applyScale(preset),
+        })),
       },
       {
         label: "Aina päällimmäisenä",
@@ -187,16 +301,36 @@ function createWidget(): void {
       { label: "Kehittäjätyökalut", click: () => win.webContents.openDevTools({ mode: "detach" }) },
       { type: "separator" },
       { label: "Lopeta", click: () => app.quit() },
-    ]).popup({ window: win });
+    ]);
+
+  ipcMain.on(IPC.showMenu, () => buildMenu(false).popup({ window: win }));
+
+  const tray = new Tray(nativeImage.createFromPath(ICON));
+  function updateTray(): void {
+    const mic = state.muted ? "mikrofoni mykistetty" : state.listenMode === "always" ? "kuuntelee" : "vain pikanäppäin";
+    tray.setToolTip(`Avatar – ${mic}${ptt && !state.muted ? ` (puhu: ${ptt.label})` : ""}`);
+  }
+  updateTray();
+  tray.on("click", toggleVisible);
+  tray.on("right-click", () => tray.popUpContextMenu(buildMenu(true)));
+  app.on("will-quit", () => {
+    unregisterPushToTalk();
+    tray.destroy();
   });
 }
 
-app.whenReady().then(() => {
-  // The page is our own local app: allow the microphone without a prompt.
-  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => callback(permission === "media"));
-  session.defaultSession.setPermissionCheckHandler((_wc, permission) => permission === "media");
-  if (MODE === "window") createFullWindow();
-  else createWidget();
-});
+// Two copies would fight over the hotkey and the microphone: show the first one instead.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", () => BrowserWindow.getAllWindows()[0]?.showInactive());
+  app.whenReady().then(() => {
+    // The page is our own local app: allow the microphone without a prompt.
+    session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => callback(permission === "media"));
+    session.defaultSession.setPermissionCheckHandler((_wc, permission) => permission === "media");
+    if (MODE === "window") createFullWindow();
+    else createWidget();
+  });
+}
 
 app.on("window-all-closed", () => app.quit());

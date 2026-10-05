@@ -1,7 +1,7 @@
 // The desktop widget page: only the avatar, a speech bubble and a status pill
 // on a transparent window. Runs inside Electron (desktop/main.ts); opened in
 // a normal browser it still works, just without click-through and dragging.
-import type { DesktopBridge, DesktopCommand } from "../../../shared/desktop";
+import type { DesktopBridge, DesktopCommand, MicConfig } from "../../../shared/desktop";
 import { fetchHealth } from "../api";
 import { App, type AppState } from "../app";
 import { Avatar } from "../avatar/avatar";
@@ -111,14 +111,16 @@ function renderStatus(): void {
 // --- App -------------------------------------------------------------------------------
 
 const store = createSettingsStore();
-window.addEventListener("storage", () => store.reload()); // another app window changed settings
+window.addEventListener("storage", () => {
+  store.reload(); // another app window changed settings
+  reportState();
+});
 
 const avatar = new Avatar(stage, { distance: 1.15, lift: 0.1 });
 avatar.load("/models/avatar.vrm").catch((err: unknown) => {
   console.warn("Avatar model failed to load", err);
   showBubble(strings.avatarMissing, true);
 });
-if (import.meta.env.DEV) Object.assign(window, { avatar });
 
 const speaker = createSpeaker(store, (text) => {
   showBubble(text, true);
@@ -144,7 +146,10 @@ const app = new App(
       showBubble(text, true);
       hideBubble(NOTICE_HOLD_MS);
     },
-    setLanguage: (lang) => store.update({ lang }),
+    setLanguage: (lang) => {
+      store.update({ lang });
+      reportState();
+    },
     setSpeaking: (engine) => avatar.setMouthSource(engine === null ? null : engine === "browser" ? "procedural" : "audio"),
     setEmotion: (emotion) => avatar.setEmotion(emotion),
     setSearch: (query) => {
@@ -155,26 +160,66 @@ const app = new App(
   },
   store.get,
   speaker,
+  { pttStt: "whisper" }, // Electron has no Web Speech
 );
+
+if (import.meta.env.DEV) Object.assign(window, { avatar, app });
 
 window.addEventListener("pagehide", () => app.endConversation());
 
-// Always-on listening needs local Whisper, which takes a few seconds to load.
-async function startListening(): Promise<void> {
-  statusNote = strings.widget.sttStarting;
-  renderStatus();
-  while (!(await fetchHealth())?.whisper) await new Promise((r) => setTimeout(r, 3000));
+// --- Microphone ------------------------------------------------------------------------
+
+/** Set from the tray or the context menu; in a plain browser always-on is the default. */
+let mic: MicConfig = { mode: "always", muted: false, hotkey: null };
+let whisperReady = false;
+
+async function applyMic(): Promise<void> {
+  const config = mic;
+  if (config.muted) {
+    await app.setListenMode("ptt");
+    app.releaseMic();
+    statusNote = strings.widget.muted;
+    renderStatus();
+    return;
+  }
+  if (!whisperReady) return; // started once Whisper answers
   try {
-    await app.setListenMode("always");
-    store.update({ listenMode: "always" });
-    statusNote = null;
+    await app.setListenMode(config.mode);
+    await app.prepareMic();
+    statusNote = config.mode === "ptt" && config.hotkey ? strings.widget.holdToTalk(config.hotkey) : null;
   } catch (err) {
     statusNote = strings.widget.micOff;
     showBubble(strings.micFailed(err instanceof Error ? err.message : String(err)), true);
   }
   renderStatus();
 }
+
+// Listening needs local Whisper, which takes a few seconds to load.
+async function startListening(): Promise<void> {
+  if (bridge) mic = await bridge.getMicConfig();
+  if (!mic.muted) {
+    statusNote = strings.widget.sttStarting;
+    renderStatus();
+  }
+  while (!(await fetchHealth())?.whisper) await new Promise((r) => setTimeout(r, 3000));
+  whisperReady = true;
+  await applyMic();
+}
 void startListening();
+
+/** The global push-to-talk key (desktop/hotkey.ts). */
+function onPushToTalk(down: boolean): void {
+  if (!down) {
+    app.stopListening();
+    return;
+  }
+  if (mic.muted || !whisperReady) {
+    showBubble(mic.muted ? strings.widget.mutedHint : strings.widget.sttStarting, true);
+    hideBubble(2500);
+    return;
+  }
+  app.startListening();
+}
 
 // --- Desktop: click-through, dragging, menu ----------------------------------------
 
@@ -225,9 +270,23 @@ window.addEventListener("pointerup", () => {
   dragging = false;
 });
 
+// The mouse wheel over the avatar resizes the widget (throttled: one step per notch).
+let lastWheel = 0;
+window.addEventListener(
+  "wheel",
+  (event) => {
+    if (!interactive || event.deltaY === 0) return;
+    event.preventDefault();
+    if (event.timeStamp - lastWheel < 60) return;
+    lastWheel = event.timeStamp;
+    bridge?.scaleBy(event.deltaY < 0 ? 1 : -1);
+  },
+  { passive: false },
+);
+
 window.addEventListener("contextmenu", (event) => {
   event.preventDefault();
-  bridge?.showMenu({ lang: store.get().lang });
+  bridge?.showMenu();
 });
 
 bridge?.onCommand((command: DesktopCommand) => {
@@ -241,6 +300,20 @@ bridge?.onCommand((command: DesktopCommand) => {
       break;
     case "lang":
       store.update({ lang: command.lang });
+      reportState();
+      break;
+    case "mic":
+      mic = command.config;
+      void applyMic();
+      break;
+    case "ptt":
+      onPushToTalk(command.down);
       break;
   }
 });
+
+/** Keeps the menus in the main process showing the current language. */
+function reportState(): void {
+  bridge?.reportState({ lang: store.get().lang });
+}
+reportState();

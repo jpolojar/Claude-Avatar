@@ -167,23 +167,26 @@ The server uses Claude's server-side fallbacks (`fallbacks: "default"`): if the 
 ```
 npm run typecheck   # TypeScript checks for the server and the web app
 npm test            # unit tests
-npm run widget      # work in progress: the app in an Electron desktop window
+npm run widget      # work in progress: the desktop widget (Electron)
 ```
 
 `npm run widget` starts the same servers as `npm run dev` plus the desktop widget (`desktop/main.ts`, `web/widget.html`), so stop a running `npm run dev` first. The widget is a transparent, frameless window that shows only the avatar and a speech bubble:
 
-- It listens all the time (local Whisper is required; Electron has no Web Speech).
-- Drag the avatar to move it (the position is remembered); clicks on empty areas go through to the desktop.
-- Click the avatar to interrupt it; right-click for the menu (stop, new conversation, language, always on top, dev tools, quit).
+- It needs local Whisper (Electron has no Web Speech). By default it listens all the time.
+- **Push-to-talk works from any program:** hold **Ctrl+Space**, talk, and let go. Holding the key also interrupts the avatar. The key is caught globally with Electron's `globalShortcut` (which keeps it from the program in focus) and its release with [uiohook-napi](https://github.com/SnosMe/uiohook-napi). Without uiohook the key toggles instead (press to talk, press again to send). `AVATAR_PTT_KEY` changes the key (an [Electron accelerator](https://www.electronjs.org/docs/latest/api/accelerator), e.g. `Alt+Q`).
+- The tray icon shows and hides the avatar (left click). Its menu (right click) has the microphone options: continuous listening on or off (push-to-talk only), and mute, which turns the microphone off entirely, the key included.
+- Drag the avatar to move it; clicks on empty areas go through to the desktop. Scroll the mouse wheel over the avatar to resize it, or choose a size from the menu. The position, size and microphone options are remembered.
+- Click the avatar to interrupt it; right-click for the menu (stop, new conversation, microphone, language, size, always on top, dev tools, quit).
 - `AVATAR_DESKTOP_MODE=window` opens the full web app in a normal Electron window instead.
 
-This is work in progress (the tray icon, global push-to-talk key, settings window and installer come next).
+This is work in progress (the settings window and installer come next).
 
 Layout:
 
 - `server/`: the Express server. `claude.ts` streams from Claude (with web search), `sentences.ts` splits the reply into sentences, `markers.ts` handles the language and emotion markers, `session.ts` keeps the conversation and interruptions, `memory.ts` the long-term memory, `stt.ts` talks to Whisper, `tts/` holds the speech engines (Edge, Piper), and `persona.md` is the avatar's persona (in Finnish).
 - `scripts/`: `whisper.mjs` starts whisper.cpp as part of `npm run dev`; `start-avatar.ps1` and `create-shortcut.ps1` are the Windows launcher.
-- `web/`: the Vite + TypeScript web app. `app.ts` is the state machine and conversation flow, `stt/` speech recognition (Web Speech, VAD + Whisper), `tts/` the speech engines, fallback and sentence queue, `audio/` the Web Audio graph, lip sync and echo test, `avatar/` the 3D avatar and its motion, and `ui/` the views and (Finnish) UI strings. In dev mode the avatar is available in the console as `avatar`, e.g. `avatar.setState("thinking")`.
+- `web/`: the Vite + TypeScript web app. `app.ts` is the state machine and conversation flow, `stt/` speech recognition (Web Speech, VAD + Whisper, Whisper push-to-talk), `tts/` the speech engines, fallback and sentence queue, `audio/` the Web Audio graph, lip sync and echo test, `avatar/` the 3D avatar and its motion, and `ui/` the views and (Finnish) UI strings. In dev mode the avatar is available in the console as `avatar`, e.g. `avatar.setState("thinking")`.
+- `desktop/`: the Electron widget: `main.ts` (windows, tray, menus), `hotkey.ts` (global push-to-talk) and `preload.ts` (the bridge to the page, typed in `shared/desktop.ts`); `web/widget.html` and `web/src/widget/` are its page.
 - `shared/protocol.ts`: the wire format shared by the server and the browser (NDJSON).
 
 ## Credits

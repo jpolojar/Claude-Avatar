@@ -35,6 +35,10 @@ export class VadListener {
   private speakingSince: number | null = null;
   private warmUpTimer: ReturnType<typeof setTimeout> | undefined;
   private unprotectedEcho = false;
+  /** Push-to-talk owns the microphone: ignore what the VAD hears. */
+  private suspended = false;
+  /** The current segment began before or during a suspension. */
+  private segmentIgnored = false;
 
   /** The voice now playing cannot be echo-cancelled (browser speechSynthesis). */
   setUnprotectedEcho(unprotected: boolean): void {
@@ -59,11 +63,30 @@ export class VadListener {
       ...NORMAL,
       redemptionMs: 800, // silence that ends an utterance (the library default 1.4 s feels sluggish)
       preSpeechPadMs: 300,
-      onSpeechRealStart: () => this.handlers.onSpeechStart(),
-      onSpeechEnd: (audio) => this.handlers.onSpeechEnd(audio),
-      onVADMisfire: () => this.handlers.onMisfire(),
+      onSpeechStart: () => {
+        this.segmentIgnored = this.suspended;
+      },
+      onSpeechRealStart: () => {
+        if (this.heard()) this.handlers.onSpeechStart();
+      },
+      onSpeechEnd: (audio) => {
+        if (this.heard()) this.handlers.onSpeechEnd(audio);
+      },
+      onVADMisfire: () => {
+        if (this.heard()) this.handlers.onMisfire();
+      },
       startOnLoad: true,
     });
+  }
+
+  /** While push-to-talk records, the same speech must not also arrive from here. */
+  setSuspended(suspended: boolean): void {
+    this.suspended = suspended;
+    if (suspended) this.segmentIgnored = true; // includes a segment already under way
+  }
+
+  private heard(): boolean {
+    return !this.suspended && !this.segmentIgnored;
   }
 
   setAvatarSpeaking(speaking: boolean): void {

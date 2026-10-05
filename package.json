@@ -10,7 +10,7 @@
     "dev:web": "vite --config web/vite.config.ts",
     "whisper": "node --env-file-if-exists=.env scripts/whisper.mjs",
     "widget": "npm run widget:build && concurrently --kill-others-on-fail -n server,web,stt,app -c blue,green,magenta,yellow \"npm:dev:server\" \"npm:dev:web\" \"npm:whisper\" \"npm:widget:app\"",
-    "widget:build": "esbuild desktop/main.ts desktop/preload.ts --bundle --platform=node --format=cjs --external:electron --outdir=desktop/dist --out-extension:.js=.cjs",
+    "widget:build": "esbuild desktop/main.ts desktop/preload.ts --bundle --platform=node --format=cjs --external:electron --external:uiohook-napi --outdir=desktop/dist --out-extension:.js=.cjs",
     "widget:app": "electron desktop/dist/main.cjs",
     "typecheck": "tsc -p tsconfig.json && tsc -p web/tsconfig.json",
     "test": "tsx --test \"server/**/*.test.ts\""
@@ -24,7 +24,8 @@
     "@ricky0123/vad-web": "^0.0.31",
     "express": "^5.2.1",
     "msedge-tts": "^2.0.9",
-    "three": "^0.186.1"
+    "three": "^0.186.1",
+    "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",

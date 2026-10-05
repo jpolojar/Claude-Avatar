@@ -2,6 +2,7 @@ import type { ChatEvent, Emotion, Lang, TtsEngineId } from "../../shared/protoco
 import { endSession, isAbortError, streamChat, transcribe } from "./api";
 import type { ListenMode, Settings } from "./settings";
 import { VadListener, toWav } from "./stt/vad-listener";
+import { WhisperPtt } from "./stt/whisper-ptt";
 import { WebSpeechStt } from "./stt/webspeech";
 import type { Clip } from "./tts/engine";
 import { SpeechQueue } from "./tts/queue";
@@ -48,6 +49,12 @@ interface TurnTimings {
 
 const STT_LANG: Record<Lang, string> = { fi: "fi-FI", en: "en-US" };
 
+export interface AppOptions {
+  /** Who transcribes push-to-talk: the browser (Web Speech) or local Whisper.
+   *  Electron has no Web Speech, so the desktop widget uses Whisper. */
+  pttStt?: "webspeech" | "whisper";
+}
+
 export class App {
   private state: AppState = "idle";
   private sessionId = crypto.randomUUID();
@@ -55,6 +62,9 @@ export class App {
   private releasedAt: number | null = null;
   private sttError: string | null = null;
   private readonly stt: WebSpeechStt;
+  private readonly whisperPtt: WhisperPtt | null;
+  /** The push-to-talk recording getting under way (the mic may still be opening). */
+  private pttStarting: Promise<boolean> | null = null;
 
   // Always-on listening.
   private listener: VadListener | null = null;
@@ -71,7 +81,9 @@ export class App {
     private readonly view: AppView,
     private readonly settings: () => Settings,
     private readonly speaker: Speaker,
+    options: AppOptions = {},
   ) {
+    this.whisperPtt = options.pttStt === "whisper" ? new WhisperPtt() : null;
     this.stt = new WebSpeechStt({
       onInterim: (text) => this.view.setInterim(text),
       onFinal: (text) => this.onTranscript(text),
@@ -105,8 +117,24 @@ export class App {
     this.setState(this.state); // refresh the status label
   }
 
-  /** Space or the button pressed: push-to-talk, or just "stop talking" when always on. */
+  /** Opens the push-to-talk microphone ahead of the first press (Whisper only). */
+  prepareMic(): Promise<void> {
+    return this.whisperPtt?.open() ?? Promise.resolve();
+  }
+
+  /** Releases the push-to-talk microphone (muted). */
+  releaseMic(): void {
+    this.whisperPtt?.close();
+    this.listener?.setSuspended(false);
+  }
+
+  /** Space or the button pressed: push-to-talk, or just "stop talking" when always on
+   *  (with Whisper, push-to-talk works in both modes). */
   startListening(): void {
+    if (this.whisperPtt) {
+      this.pttStarting ??= this.startWhisperPtt(this.whisperPtt);
+      return;
+    }
     if (this.alwaysOn) {
       this.interrupt();
       this.setState("idle");
@@ -124,6 +152,10 @@ export class App {
 
   /** Push-to-talk released: the transcript arrives through onTranscript. */
   stopListening(): void {
+    if (this.whisperPtt) {
+      void this.finishWhisperPtt(this.whisperPtt);
+      return;
+    }
     if (this.alwaysOn || this.state !== "listening") return;
     this.releasedAt = performance.now();
     this.stt.stop();
@@ -149,6 +181,10 @@ export class App {
   /** Stops listening and any reply or speech in progress. */
   stop(): void {
     this.stt.cancel();
+    this.utterance++; // drops a transcription still on its way
+    this.whisperPtt?.cancel();
+    this.pttStarting = null;
+    this.listener?.setSuspended(false);
     this.interrupt();
     this.setState("idle");
   }
@@ -206,6 +242,61 @@ export class App {
     this.view.showNotice(strings.sttErrors[code] ?? strings.sttErrorFallback(code));
     // Failures before recognition started produce no onFinal; reset here.
     if (!this.stt.active && this.state === "listening") this.setState("idle");
+  }
+
+  // --- Push-to-talk (Whisper) -------------------------------------------------
+
+  private async startWhisperPtt(ptt: WhisperPtt): Promise<boolean> {
+    this.stt.cancel();
+    this.utterance++;
+    this.interrupt();
+    this.listener?.setSuspended(true); // the same speech must not come in twice
+    this.view.showNotice(null);
+    this.setState("listening");
+    try {
+      await ptt.start();
+      return true;
+    } catch (err) {
+      this.listener?.setSuspended(false);
+      this.setState("idle");
+      this.view.showNotice(strings.micFailed(err instanceof Error ? err.message : String(err)));
+      return false;
+    }
+  }
+
+  private async finishWhisperPtt(ptt: WhisperPtt): Promise<void> {
+    const starting = this.pttStarting;
+    this.pttStarting = null;
+    if (!starting || !(await starting) || !ptt.isRecording) return;
+    const utterance = this.utterance;
+    const endedAt = performance.now();
+    const audio = await ptt.stop();
+    this.listener?.setSuspended(false);
+    if (this.utterance !== utterance) return;
+    if (!audio) {
+      this.setState("idle");
+      this.view.showNotice(strings.noSpeechHotkey);
+      return;
+    }
+    this.setState("thinking");
+    let text: string;
+    try {
+      text = (await transcribe(toWav(audio), this.lang)).text.trim();
+    } catch {
+      this.view.showNotice(strings.whisperFailed);
+      if (this.utterance === utterance) this.setState("idle");
+      return;
+    }
+    if (this.utterance !== utterance) return;
+    // Anything always-on listening caught just before the key went down comes first.
+    const full = `${this.heardSoFar} ${text}`.trim();
+    this.heardSoFar = "";
+    if (!full) {
+      this.setState("idle");
+      this.view.showNotice(strings.noSpeechHotkey);
+      return;
+    }
+    void this.send(full, performance.now() - endedAt);
   }
 
   // --- Always-on (VAD + Whisper) ----------------------------------------------

@@ -26,6 +26,9 @@ export const strings = {
   widget: {
     sttStarting: "Puheentunnistus käynnistyy…",
     micOff: "Mikrofoni ei käytössä",
+    muted: "Mikrofoni mykistetty",
+    mutedHint: "Mikrofoni on mykistetty. Poista mykistys ilmaisinalueen valikosta.",
+    holdToTalk: (key: string) => `Puhu: pidä ${key} pohjassa`,
   },
   searching: (query: string) => (query ? `Hakee verkosta: ${query}` : "Hakee verkosta…"),
   searched: "(haki verkosta)",
@@ -61,6 +64,7 @@ export const strings = {
     en: "Sorry, I can't answer that.",
   } satisfies Record<Lang, string>,
   noSpeech: "En kuullut mitään. Pidä välilyöntiä pohjassa koko puheen ajan.",
+  noSpeechHotkey: "En kuullut mitään. Pidä pikanäppäintä pohjassa koko puheen ajan.",
   avatarMissing: "Avatar-mallia ei löytynyt. Tallenna VRM-malli nimellä web/public/models/avatar.vrm.",
   missingKey: "API-avain puuttuu. Kopioi .env.example tiedostoksi .env, lisää avain ja käynnistä palvelin uudelleen.",
   serverDown: "Palvelimeen ei saada yhteyttä. Onko npm run dev käynnissä?",
