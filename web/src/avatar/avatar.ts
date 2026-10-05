@@ -38,8 +38,14 @@ export class Avatar {
   private head = { x: 0, y: 0, z: 0 };
   private gaze = { x: 0, y: 0 };
   private time = 0;
+  /** Pixel alpha probes, answered right after the next render (the drawing buffer isn't kept). */
+  private probes: { x: number; y: number; resolve: (alpha: number) => void }[] = [];
 
-  constructor(private readonly container: HTMLElement) {
+  constructor(
+    private readonly container: HTMLElement,
+    /** Camera distance (m) and how far the view is raised so the avatar sits lower (m). */
+    private readonly framing: { distance?: number; lift?: number } = {},
+  ) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.domElement.className = "avatar-canvas";
@@ -119,10 +125,34 @@ export class Avatar {
     this.camera.aspect = width / height;
     // `focus` is the head bone (top of the neck). Frame from the top of the
     // head down to the chest; narrow (portrait) stages need more distance.
-    const distance = this.camera.aspect < 0.8 ? 1.5 : 1.0;
-    this.camera.position.set(0, this.focus.y + 0.02, distance);
-    this.camera.lookAt(0, this.focus.y - 0.02, 0);
+    const distance = this.framing.distance ?? (this.camera.aspect < 0.8 ? 1.5 : 1.0);
+    const lift = this.framing.lift ?? 0;
+    this.camera.position.set(0, this.focus.y + 0.02 + lift, distance);
+    this.camera.lookAt(0, this.focus.y - 0.02 + lift, 0);
     this.camera.updateProjectionMatrix();
+  }
+
+  /** Opacity (0–1) of the rendered avatar at a point in the page, e.g. for click-through. */
+  alphaAt(clientX: number, clientY: number): Promise<number> {
+    return new Promise((resolve) => this.probes.push({ x: clientX, y: clientY, resolve }));
+  }
+
+  private answerProbes(): void {
+    if (this.probes.length === 0) return;
+    const canvas = this.renderer.domElement;
+    const rect = canvas.getBoundingClientRect();
+    const gl = this.renderer.getContext();
+    const pixel = new Uint8Array(4);
+    for (const probe of this.probes.splice(0)) {
+      const px = Math.floor(((probe.x - rect.left) / rect.width) * canvas.width);
+      const py = Math.floor(((probe.y - rect.top) / rect.height) * canvas.height);
+      if (px < 0 || py < 0 || px >= canvas.width || py >= canvas.height) {
+        probe.resolve(0);
+        continue;
+      }
+      gl.readPixels(px, canvas.height - 1 - py, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+      probe.resolve((pixel[3] ?? 0) / 255);
+    }
   }
 
   private frame(timestamp: number): void {
@@ -135,6 +165,7 @@ export class Avatar {
       vrm.update(dt);
     }
     this.renderer.render(this.scene, this.camera);
+    this.answerProbes();
   }
 
   private animate(vrm: VRM, dt: number): void {

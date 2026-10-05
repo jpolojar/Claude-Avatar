@@ -10,7 +10,15 @@ export interface AssistantBubble {
   remove(): void;
 }
 
-export class ChatLog {
+/** Where the conversation is shown: the chat log in the page, or the widget's history. */
+export interface ConversationLog {
+  clear(): void;
+  /** Returns a function that removes the message again. */
+  addUser(text: string): () => void;
+  addAssistant(): AssistantBubble;
+}
+
+export class ChatLog implements ConversationLog {
   constructor(private readonly el: HTMLElement) {}
 
   clear(): void {

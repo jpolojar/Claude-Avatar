@@ -23,6 +23,10 @@ export const strings = {
     speaking: "Puhuu…",
   } satisfies Record<AppState, string>,
   idleAlwaysOn: "Kuulolla – puhu milloin vain",
+  widget: {
+    sttStarting: "Puheentunnistus käynnistyy…",
+    micOff: "Mikrofoni ei käytössä",
+  },
   searching: (query: string) => (query ? `Hakee verkosta: ${query}` : "Hakee verkosta…"),
   searched: "(haki verkosta)",
   /** Said aloud when a web search starts before Claude has said anything. */

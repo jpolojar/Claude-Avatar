@@ -170,7 +170,14 @@ npm test            # unit tests
 npm run widget      # work in progress: the app in an Electron desktop window
 ```
 
-`npm run widget` starts the same servers as `npm run dev` plus an Electron window (`desktop/main.ts`), so stop a running `npm run dev` first. It is the first step toward a desktop widget; push-to-talk does not work there yet (Electron has no Web Speech), use always-on listening or type.
+`npm run widget` starts the same servers as `npm run dev` plus the desktop widget (`desktop/main.ts`, `web/widget.html`), so stop a running `npm run dev` first. The widget is a transparent, frameless window that shows only the avatar and a speech bubble:
+
+- It listens all the time (local Whisper is required; Electron has no Web Speech).
+- Drag the avatar to move it (the position is remembered); clicks on empty areas go through to the desktop.
+- Click the avatar to interrupt it; right-click for the menu (stop, new conversation, language, always on top, dev tools, quit).
+- `AVATAR_DESKTOP_MODE=window` opens the full web app in a normal Electron window instead.
+
+This is work in progress (the tray icon, global push-to-talk key, settings window and installer come next).
 
 Layout:
 

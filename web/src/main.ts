@@ -1,13 +1,12 @@
-import { isLang, type TtsEngineId } from "../../shared/protocol";
-import { fetchHealth, fetchVoices } from "./api";
+import { isLang } from "../../shared/protocol";
+import { fetchHealth } from "./api";
 import { App, type AppState } from "./app";
 import { unlockAudio } from "./audio/context";
 import { Avatar } from "./avatar/avatar";
 import { runEchoTest } from "./audio/echo-test";
-import { loadSettings, saveSettings, setServerVoices, type ListenMode, type Settings } from "./settings";
+import { createSettingsStore, createSpeaker, keepLoadingVoices } from "./core";
+import type { ListenMode, Settings } from "./settings";
 import { WebSpeechStt } from "./stt/webspeech";
-import { waitForBrowserVoices } from "./tts/browser-tts";
-import { Speaker } from "./tts/speaker";
 import { ChatLog } from "./ui/chat-log";
 import { byId } from "./ui/dom";
 import { bindMemoryPanel } from "./ui/memory-panel";
@@ -30,21 +29,15 @@ const showNotice = (text: string | null) => {
   noticeEl.textContent = text ?? "";
 };
 
-let settings = loadSettings();
+const store = createSettingsStore();
+let settings = store.get();
 const getSettings = () => settings;
 const updateSettings = (patch: Partial<Settings>) => {
-  settings = { ...settings, ...patch };
-  saveSettings(settings);
+  store.update(patch);
+  settings = store.get();
 };
 
-// Tell about a failing server voice once, not on every sentence.
-const reportedFallbacks = new Set<TtsEngineId>();
-const speaker = new Speaker(getSettings, (from, error) => {
-  console.warn(`TTS engine ${from} failed, using the browser voice`, error);
-  if (reportedFallbacks.has(from)) return;
-  reportedFallbacks.add(from);
-  showNotice(strings.ttsFallback(from));
-});
+const speaker = createSpeaker(store, showNotice);
 
 let appState: AppState = "idle";
 let searchQuery: string | null = null;
@@ -238,11 +231,4 @@ void fetchHealth().then((health) => {
   }
 });
 
-// The server may still be starting; keep asking until its voices arrive.
-const loadVoices = async () => {
-  const [voices] = await Promise.all([fetchVoices(), waitForBrowserVoices()]);
-  setServerVoices(voices);
-  settingsPanel.refresh();
-  if (voices.length === 0) setTimeout(loadVoices, 3000);
-};
-void loadVoices();
+keepLoadingVoices(() => settingsPanel.refresh());

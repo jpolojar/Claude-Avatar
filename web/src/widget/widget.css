@@ -1,0 +1,141 @@
+/* The desktop widget: a transparent window with only the avatar, a speech
+   bubble and a small status pill. */
+:root {
+  --bubble-bg: rgba(255, 255, 255, 0.96);
+  --bubble-text: #1d2233;
+  --muted: rgba(255, 255, 255, 0.85);
+  --listening: #4fd18b;
+  --thinking: #f2c14e;
+  --speaking: #7aa2ff;
+  --idle: #9aa1b5;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+}
+
+.stage {
+  position: absolute;
+  inset: 0;
+}
+
+.avatar-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.bubble {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  right: 12px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: var(--bubble-bg);
+  color: var(--bubble-text);
+  font-size: 15px;
+  line-height: 1.4;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  max-height: 148px;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.35s ease;
+}
+
+/* Tail pointing down at the avatar. */
+.bubble::after {
+  content: "";
+  position: absolute;
+  bottom: -9px;
+  left: 50%;
+  margin-left: -9px;
+  border: 9px solid transparent;
+  border-bottom: 0;
+  border-top-color: var(--bubble-bg);
+}
+
+.bubble.fading {
+  opacity: 0;
+}
+
+.bubble.warning {
+  background: #fff2d6;
+  color: #6b4a1a;
+}
+
+.bubble.warning::after {
+  border-top-color: #fff2d6;
+}
+
+/* What the avatar heard you say, briefly. */
+.heard {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 44px;
+  text-align: center;
+  color: #fff;
+  font-size: 13px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+.status {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 24px);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(18, 20, 26, 0.6);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  --state-color: var(--idle);
+}
+
+.status:has(#status-text:empty) {
+  padding: 4px;
+}
+
+.status[data-state="listening"] {
+  --state-color: var(--listening);
+}
+.status[data-state="thinking"] {
+  --state-color: var(--thinking);
+}
+.status[data-state="speaking"] {
+  --state-color: var(--speaking);
+}
+
+.dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--state-color);
+  box-shadow: 0 0 8px var(--state-color);
+}
+
+.status[data-state="listening"] .dot,
+.status[data-state="thinking"] .dot {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.45;
+  }
+}

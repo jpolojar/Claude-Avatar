@@ -6,14 +6,14 @@ import { WebSpeechStt } from "./stt/webspeech";
 import type { Clip } from "./tts/engine";
 import { SpeechQueue } from "./tts/queue";
 import type { Speaker } from "./tts/speaker";
-import type { ChatLog } from "./ui/chat-log";
+import type { ConversationLog } from "./ui/chat-log";
 import { strings } from "./ui/strings";
 
 export type AppState = "idle" | "listening" | "thinking" | "speaking";
 
 /** What the app needs from the page; implemented with plain DOM in main.ts. */
 export interface AppView {
-  log: ChatLog;
+  log: ConversationLog;
   setState(state: AppState): void;
   setInterim(text: string): void;
   setDebug(text: string): void;
@@ -26,6 +26,8 @@ export interface AppView {
   setEmotion(emotion: Emotion): void;
   /** Claude is searching the web ("" when the query is unknown), or stopped (null). */
   setSearch(query: string | null): void;
+  /** A sentence starts playing (widgets show it as a speech bubble). */
+  showSentence?(text: string): void;
 }
 
 /** Silence between sentences longer than this means Claude is still busy. */
@@ -295,6 +297,7 @@ export class App {
           this.listener?.setUnprotectedEcho(clip.engine === "browser");
           if (this.current === controller) this.setState("speaking");
           this.view.setSpeaking(clip.engine);
+          this.view.showSentence?.(clip.text);
         },
         onClipEnd: () => {
           this.view.setSpeaking(null);
@@ -424,6 +427,7 @@ export class App {
     this.listener?.setUnprotectedEcho(clip.engine === "browser");
     if (this.current === controller) this.setState("speaking");
     this.view.setSpeaking(clip.engine);
+    this.view.showSentence?.(clip.text);
     try {
       await clip.play(controller.signal);
     } finally {

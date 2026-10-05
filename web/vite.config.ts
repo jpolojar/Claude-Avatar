@@ -57,6 +57,9 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: "../dist/web",
       emptyOutDir: true,
+      rollupOptions: {
+        input: { main: `${webRoot}/index.html`, widget: `${webRoot}/widget.html` },
+      },
     },
   };
 });
