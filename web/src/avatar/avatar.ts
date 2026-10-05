@@ -132,6 +132,13 @@ export class Avatar {
     this.camera.updateProjectionMatrix();
   }
 
+  /** The canvas is shown scaled by a CSS transform (the desktop widget):
+   *  render at the scaled resolution so it stays sharp without wasted pixels. */
+  setResolutionScale(scale: number): void {
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio * scale, 2));
+    this.resize();
+  }
+
   /** Opacity (0–1) of the rendered avatar at a point in the page, e.g. for click-through. */
   alphaAt(clientX: number, clientY: number): Promise<number> {
     return new Promise((resolve) => this.probes.push({ x: clientX, y: clientY, resolve }));

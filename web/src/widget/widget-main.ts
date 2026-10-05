@@ -1,22 +1,23 @@
 // The desktop widget page: only the avatar, a speech bubble and a status pill
 // on a transparent window. Runs inside Electron (desktop/main.ts); opened in
 // a normal browser it still works, just without click-through and dragging.
-import type { DesktopBridge, DesktopCommand, MicConfig } from "../../../shared/desktop";
+import {
+  WIDGET_SIZE,
+  type DesktopCommand,
+  type HistoryEntry,
+  type WidgetStatus,
+} from "../../../shared/desktop";
 import { fetchHealth } from "../api";
 import { App, type AppState } from "../app";
 import { Avatar } from "../avatar/avatar";
 import { createSettingsStore, createSpeaker, keepLoadingVoices } from "../core";
+import { desktop } from "../desktop";
 import type { AssistantBubble, ConversationLog } from "../ui/chat-log";
 import { byId } from "../ui/dom";
 import { strings } from "../ui/strings";
 
-declare global {
-  interface Window {
-    avatarDesktop?: DesktopBridge;
-  }
-}
-
-const bridge = window.avatarDesktop;
+const bridge = desktop;
+const root = byId("root");
 const stage = byId("stage");
 const bubble = byId("bubble");
 const heard = byId("heard");
@@ -56,37 +57,57 @@ function showHeard(text: string): void {
   heardTimer = setTimeout(() => (heard.hidden = true), HEARD_HOLD_MS);
 }
 
-/** Keeps the conversation for the history view (phase 4); the bubble shows it live. */
+/** Keeps the conversation for the settings window's history view; the bubble shows it live. */
 class WidgetLog implements ConversationLog {
-  readonly entries: { who: "user" | "avatar"; text: string }[] = [];
+  private readonly entries: HistoryEntry[] = [];
+  private reportTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** Sends the history to the main process, at most a few times a second while text streams in. */
+  private changed(): void {
+    if (!bridge || this.reportTimer) return;
+    this.reportTimer = setTimeout(() => {
+      this.reportTimer = undefined;
+      bridge.reportHistory(this.entries.filter((e) => e.text).map((e) => ({ ...e })));
+    }, 250);
+  }
+
+  private removeEntry(entry: HistoryEntry): void {
+    const i = this.entries.indexOf(entry);
+    if (i >= 0) this.entries.splice(i, 1);
+    this.changed();
+  }
 
   clear(): void {
     this.entries.length = 0;
+    this.changed();
   }
 
   addUser(text: string): () => void {
-    const entry = { who: "user" as const, text };
+    const entry: HistoryEntry = { who: "user", text };
     this.entries.push(entry);
+    this.changed();
     showHeard(text);
     return () => {
-      const i = this.entries.indexOf(entry);
-      if (i >= 0) this.entries.splice(i, 1);
+      this.removeEntry(entry);
       heard.hidden = true;
     };
   }
 
   addAssistant(): AssistantBubble {
-    const entry = { who: "avatar" as const, text: "" };
+    const entry: HistoryEntry = { who: "avatar", text: "" };
     this.entries.push(entry);
     return {
-      append: (text) => (entry.text += text),
-      set: (text) => (entry.text = text),
+      append: (text) => {
+        entry.text += text;
+        this.changed();
+      },
+      set: (text) => {
+        entry.text = text;
+        this.changed();
+      },
       note: () => {},
       error: (text) => showBubble(text, true),
-      remove: () => {
-        const i = this.entries.indexOf(entry);
-        if (i >= 0) this.entries.splice(i, 1);
-      },
+      remove: () => this.removeEntry(entry),
     };
   }
 }
@@ -156,7 +177,9 @@ const app = new App(
       searchQuery = query;
       renderStatus();
     },
-    showSentence: (text) => showBubble(text),
+    showSentence: (text) => {
+      if (options.showBubble) showBubble(text);
+    },
   },
   store.get,
   speaker,
@@ -169,12 +192,21 @@ window.addEventListener("pagehide", () => app.endConversation());
 
 // --- Microphone ------------------------------------------------------------------------
 
-/** Set from the tray or the context menu; in a plain browser always-on is the default. */
-let mic: MicConfig = { mode: "always", muted: false, hotkey: null };
+/** Set from the menus and the settings window; in a plain browser always-on is the default. */
+let options: WidgetStatus = {
+  listenMode: "always",
+  muted: false,
+  alwaysOnTop: false,
+  scale: 1,
+  showBubble: true,
+  hotkey: "",
+  hotkeyLabel: null,
+  hotkeyMode: null,
+};
 let whisperReady = false;
 
 async function applyMic(): Promise<void> {
-  const config = mic;
+  const config = options;
   if (config.muted) {
     await app.setListenMode("ptt");
     app.releaseMic();
@@ -184,9 +216,10 @@ async function applyMic(): Promise<void> {
   }
   if (!whisperReady) return; // started once Whisper answers
   try {
-    await app.setListenMode(config.mode);
+    await app.setListenMode(config.listenMode);
     await app.prepareMic();
-    statusNote = config.mode === "ptt" && config.hotkey ? strings.widget.holdToTalk(config.hotkey) : null;
+    statusNote =
+      config.listenMode === "ptt" && config.hotkeyLabel ? strings.widget.holdToTalk(config.hotkeyLabel) : null;
   } catch (err) {
     statusNote = strings.widget.micOff;
     showBubble(strings.micFailed(err instanceof Error ? err.message : String(err)), true);
@@ -196,8 +229,8 @@ async function applyMic(): Promise<void> {
 
 // Listening needs local Whisper, which takes a few seconds to load.
 async function startListening(): Promise<void> {
-  if (bridge) mic = await bridge.getMicConfig();
-  if (!mic.muted) {
+  if (bridge) options = await bridge.getOptions();
+  if (!options.muted) {
     statusNote = strings.widget.sttStarting;
     renderStatus();
   }
@@ -213,8 +246,8 @@ function onPushToTalk(down: boolean): void {
     app.stopListening();
     return;
   }
-  if (mic.muted || !whisperReady) {
-    showBubble(mic.muted ? strings.widget.mutedHint : strings.widget.sttStarting, true);
+  if (options.muted || !whisperReady) {
+    showBubble(options.muted ? strings.widget.mutedHint : strings.widget.sttStarting, true);
     hideBubble(2500);
     return;
   }
@@ -284,6 +317,8 @@ window.addEventListener(
   { passive: false },
 );
 
+window.addEventListener("dblclick", () => bridge?.openSettings());
+
 window.addEventListener("contextmenu", (event) => {
   event.preventDefault();
   bridge?.showMenu();
@@ -302,8 +337,11 @@ bridge?.onCommand((command: DesktopCommand) => {
       store.update({ lang: command.lang });
       reportState();
       break;
-    case "mic":
-      mic = command.config;
+    case "say":
+      app.say(command.text);
+      break;
+    case "options":
+      options = command.options;
       void applyMic();
       break;
     case "ptt":
@@ -311,6 +349,23 @@ bridge?.onCommand((command: DesktopCommand) => {
       break;
   }
 });
+
+// --- Size ------------------------------------------------------------------------------
+
+// The page is laid out for WIDGET_SIZE and scaled to the window (Chromium's
+// zoom would also zoom the settings window, which shares the origin).
+function fitToWindow(): void {
+  // Windows rounds the window size at fractional display scaling, so fit
+  // both ways and centre what is left over.
+  const scale = bridge
+    ? Math.min(window.innerWidth / WIDGET_SIZE.width, window.innerHeight / WIDGET_SIZE.height)
+    : 1;
+  root.style.setProperty("--scale", String(scale));
+  root.style.left = bridge ? `${(window.innerWidth - WIDGET_SIZE.width * scale) / 2}px` : "0";
+  avatar.setResolutionScale(scale);
+}
+window.addEventListener("resize", fitToWindow);
+fitToWindow();
 
 /** Keeps the menus in the main process showing the current language. */
 function reportState(): void {

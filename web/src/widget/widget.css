@@ -20,6 +20,17 @@ body {
   user-select: none;
 }
 
+/* Laid out at the widget's base size (WIDGET_SIZE) and scaled to the window. */
+.root {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 340px;
+  height: 520px;
+  transform: scale(var(--scale, 1));
+  transform-origin: 0 0;
+}
+
 .stage {
   position: absolute;
   inset: 0;

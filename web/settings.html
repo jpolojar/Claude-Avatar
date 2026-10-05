@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="fi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Avatar – asetukset</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="stylesheet" href="/src/style.css" />
+    <link rel="stylesheet" href="/src/settings-window/settings.css" />
+  </head>
+  <body>
+    <main class="settings-page">
+      <div id="desktop-only" class="notice" hidden>
+        Osa asetuksista toimii vain työpöytäwidgetissä (npm run widget).
+      </div>
+
+      <details class="settings" open>
+        <summary>Yleiset</summary>
+        <div class="settings-grid">
+          <label for="lang">Kieli</label>
+          <select id="lang">
+            <option value="fi">Suomi</option>
+            <option value="en">English</option>
+          </select>
+
+          <span>Mikrofoni</span>
+          <div class="stack">
+            <label class="check"><input id="opt-always" type="checkbox" /> Jatkuva kuuntelu</label>
+            <label class="check"><input id="opt-muted" type="checkbox" /> Mykistä mikrofoni (myös pikanäppäin)</label>
+          </div>
+
+          <span>Pikanäppäin</span>
+          <div class="stack">
+            <div class="row">
+              <kbd id="hotkey-label" class="hotkey"></kbd>
+              <button id="hotkey-change" type="button" class="secondary">Vaihda…</button>
+            </div>
+            <p id="hotkey-note" class="hint"></p>
+          </div>
+
+          <label for="opt-scale">Koko</label>
+          <div class="row">
+            <input id="opt-scale" type="range" min="40" max="120" step="5" />
+            <output id="opt-scale-value"></output>
+          </div>
+
+          <span>Widget</span>
+          <div class="stack">
+            <label class="check"><input id="opt-on-top" type="checkbox" /> Aina päällimmäisenä</label>
+            <label class="check"><input id="opt-bubble" type="checkbox" /> Näytä puhe kuplana</label>
+          </div>
+        </div>
+      </details>
+
+      <details class="settings" open>
+        <summary>Ääni</summary>
+        <div class="settings-body">
+          <label class="field">
+            <span>Puhemoottori</span>
+            <select id="tts-engine">
+              <option value="edge"></option>
+              <option value="piper"></option>
+              <option value="browser"></option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Ääni</span>
+            <select id="tts-voice"></select>
+          </label>
+          <label class="field">
+            <span>Puhenopeus</span>
+            <input id="tts-rate" type="range" min="-30" max="30" step="5" />
+            <output id="tts-rate-value"></output>
+          </label>
+          <div class="field">
+            <button id="tts-test" type="button" class="secondary">Kokeile ääntä</button>
+          </div>
+        </div>
+      </details>
+
+      <details id="memory-panel" class="settings">
+        <summary>Muisti</summary>
+        <div class="settings-body">
+          <div class="memory">
+            <pre id="memory-text" class="memory-text"></pre>
+            <p id="memory-updated" class="memory-updated"></p>
+          </div>
+          <div class="field">
+            <button id="memory-clear" type="button" class="secondary">Tyhjennä muisti</button>
+          </div>
+        </div>
+      </details>
+
+      <details class="settings" open>
+        <summary>Keskustelu</summary>
+        <div class="history-body">
+          <div id="history" class="log history" aria-live="polite"></div>
+          <div class="row">
+            <button id="new-chat" type="button" class="secondary">Uusi keskustelu</button>
+          </div>
+        </div>
+      </details>
+    </main>
+    <script type="module" src="/src/settings-window/settings-main.ts"></script>
+  </body>
+</html>

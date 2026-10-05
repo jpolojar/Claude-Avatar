@@ -1,0 +1,116 @@
+/* The desktop settings window; builds on the web app's style.css. */
+
+body {
+  overflow-y: auto;
+}
+
+.settings-page {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 6px 0 20px;
+}
+
+.settings-page .notice {
+  margin: 10px 16px 0;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  align-items: center;
+  gap: 14px 20px;
+  padding: 6px 14px 14px;
+}
+
+.settings-grid > span,
+.settings-grid > label {
+  color: var(--muted);
+}
+
+.settings-grid select {
+  justify-self: start;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.check:has(input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.hotkey {
+  min-width: 8em;
+  padding: 5px 10px;
+  font-size: 0.95rem;
+  text-align: center;
+  opacity: 1;
+}
+
+.hotkey.capturing {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.hint:empty {
+  display: none;
+}
+
+.hint.error {
+  color: var(--error);
+}
+
+#opt-scale {
+  width: 220px;
+  accent-color: var(--accent);
+}
+
+output {
+  min-width: 3.5em;
+  font-variant-numeric: tabular-nums;
+}
+
+.history-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 14px 14px;
+}
+
+.history {
+  max-height: 420px;
+  padding: 4px 0;
+}
+
+.history .empty {
+  color: var(--muted);
+}

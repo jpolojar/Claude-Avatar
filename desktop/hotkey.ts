@@ -6,6 +6,7 @@
 import { globalShortcut } from "electron";
 
 type Uiohook = typeof import("uiohook-napi");
+type HookKey = keyof Uiohook["UiohookKey"];
 
 export interface PushToTalk {
   /** "hold" = talk while held; "toggle" = press to start and again to stop. */
@@ -18,7 +19,7 @@ export interface PushToTalk {
  *  program in focus hides key events from the hook). */
 const MAX_HOLD_MS = 90_000;
 
-const MODIFIERS: Record<string, { label: string; keys: (keyof Uiohook["UiohookKey"])[] }> = {
+const MODIFIERS: Record<string, { label: string; keys: HookKey[] }> = {
   control: { label: "Ctrl", keys: ["Ctrl", "CtrlRight"] },
   ctrl: { label: "Ctrl", keys: ["Ctrl", "CtrlRight"] },
   commandorcontrol: { label: "Ctrl", keys: ["Ctrl", "CtrlRight"] },
@@ -31,68 +32,93 @@ const MODIFIERS: Record<string, { label: string; keys: (keyof Uiohook["UiohookKe
 
 const KEY_LABELS: Record<string, string> = { Space: "Välilyönti" };
 
-let runningHook: Uiohook | null = null;
+let hook: Uiohook | null | undefined; // undefined = not loaded yet
+let handlers: { down(): void; up(): void } = { down() {}, up() {} };
+let current: { accelerator: string; releaseCodes: Set<number> } | null = null;
+let held = false;
+let limit: NodeJS.Timeout | undefined;
 
 function loadHook(): Uiohook | null {
+  if (hook !== undefined) return hook;
   try {
     // A native module: loaded at run time so a missing binary only costs the release detection.
-    return require("uiohook-napi") as Uiohook;
+    hook = require("uiohook-napi") as Uiohook;
+    hook.uIOhook.on("keyup", (event) => {
+      if (held && current?.releaseCodes.has(event.keycode)) release();
+    });
+    hook.uIOhook.start();
   } catch (err) {
     console.warn("uiohook-napi unavailable; push-to-talk falls back to toggling", err);
-    return null;
+    hook = null;
   }
+  return hook;
 }
 
-/** Registers the key (an Electron accelerator such as "Control+Space"); null if it is taken. */
-export function registerPushToTalk(
-  accelerator: string,
-  handlers: { down(): void; up(): void },
-): PushToTalk | null {
+function press(): void {
+  held = true;
+  limit = setTimeout(release, MAX_HOLD_MS);
+  handlers.down();
+}
+
+function release(): void {
+  if (!held) return;
+  held = false;
+  clearTimeout(limit);
+  handlers.up();
+}
+
+/** What happens when the key goes down and up. */
+export function onPushToTalk(next: { down(): void; up(): void }): void {
+  handlers = next;
+}
+
+/** The key in Finnish, e.g. "Ctrl+Välilyönti". */
+export function hotkeyLabel(accelerator: string): string {
+  const parts = accelerator.split("+").map((p) => p.trim());
+  const key = parts.at(-1) ?? "";
+  const modifiers = parts.slice(0, -1).map((m) => MODIFIERS[m.toLowerCase()]?.label ?? m);
+  return [...modifiers, KEY_LABELS[key] ?? key].join("+");
+}
+
+/** Makes `accelerator` (e.g. "Control+Space") the push-to-talk key, replacing
+ *  the previous one. Null if the key is invalid or another program has it;
+ *  then no key is registered. */
+export function setPushToTalk(accelerator: string): PushToTalk | null {
+  release();
+  if (current) globalShortcut.unregister(current.accelerator);
+  current = null;
+
   const parts = accelerator.split("+").map((p) => p.trim());
   const key = parts.at(-1) ?? "";
   const modifiers = parts.slice(0, -1).map((m) => MODIFIERS[m.toLowerCase()]);
-  const label = [...modifiers.map((m) => m?.label ?? "?"), KEY_LABELS[key] ?? key].join("+");
-
-  const hook = loadHook();
-  const keyCode = hook?.UiohookKey[(key.length === 1 ? key.toUpperCase() : key) as keyof Uiohook["UiohookKey"]];
+  const lib = loadHook();
+  const keyCode = lib?.UiohookKey[(key.length === 1 ? key.toUpperCase() : key) as HookKey];
+  const hold = lib !== null && keyCode !== undefined;
   const releaseCodes = new Set<number>(
-    keyCode === undefined ? [] : [keyCode, ...modifiers.flatMap((m) => m?.keys.map((k) => hook!.UiohookKey[k]) ?? [])],
+    lib && keyCode !== undefined
+      ? [keyCode, ...modifiers.flatMap((m) => m?.keys.map((k) => lib.UiohookKey[k]) ?? [])]
+      : [],
   );
-  const hold = hook !== null && keyCode !== undefined;
 
-  let held = false;
-  let limit: NodeJS.Timeout | undefined;
-  const press = () => {
-    held = true;
-    limit = setTimeout(release, MAX_HOLD_MS);
-    handlers.down();
-  };
-  const release = () => {
-    if (!held) return;
-    held = false;
-    clearTimeout(limit);
-    handlers.up();
-  };
-
-  // Fires again and again while the key auto-repeats; only the first counts.
-  const registered = globalShortcut.register(accelerator, () => {
-    if (!held) press();
-    else if (!hold) release();
-  });
-  if (!registered) return null;
-
-  if (hold && hook) {
-    hook.uIOhook.on("keyup", (event) => {
-      if (held && releaseCodes.has(event.keycode)) release();
+  let registered = false;
+  try {
+    // Fires again and again while the key auto-repeats; only the first counts.
+    registered = globalShortcut.register(accelerator, () => {
+      if (!held) press();
+      else if (!hold) release();
     });
-    hook.uIOhook.start();
-    runningHook = hook;
+  } catch (err) {
+    console.warn(`Invalid push-to-talk key ${accelerator}`, err);
   }
-  return { mode: hold ? "hold" : "toggle", label };
+  if (!registered) return null;
+  current = { accelerator, releaseCodes };
+  return { mode: hold ? "hold" : "toggle", label: hotkeyLabel(accelerator) };
 }
 
-export function unregisterPushToTalk(): void {
+export function stopPushToTalk(): void {
+  release();
   globalShortcut.unregisterAll();
-  runningHook?.uIOhook.stop();
-  runningHook = null;
+  current = null;
+  hook?.uIOhook.stop();
+  hook = undefined;
 }

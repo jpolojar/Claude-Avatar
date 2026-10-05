@@ -7,8 +7,8 @@ export interface SettingsPanelDeps {
   getSettings(): Settings;
   update(patch: Partial<Settings>): void;
   onTestVoice(): void;
-  /** Runs the echo test and returns a human-readable result. */
-  onEchoTest(): Promise<string>;
+  /** Runs the echo test and returns a human-readable result; without it the button is hidden. */
+  onEchoTest?(): Promise<string>;
 }
 
 export interface SettingsPanel {
@@ -22,8 +22,8 @@ export function bindSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
   const rateInput = byId<HTMLInputElement>("tts-rate");
   const rateOutput = byId<HTMLOutputElement>("tts-rate-value");
   const testButton = byId<HTMLButtonElement>("tts-test");
-  const echoButton = byId<HTMLButtonElement>("echo-test");
-  const echoResult = byId("echo-result");
+  const echoButton = document.getElementById("echo-test") as HTMLButtonElement | null;
+  const echoResult = document.getElementById("echo-result");
 
   const renderEngines = () => {
     for (const option of engineSelect.options) {
@@ -66,23 +66,28 @@ export function bindSettingsPanel(deps: SettingsPanelDeps): SettingsPanel {
 
   testButton.addEventListener("click", () => deps.onTestVoice());
 
-  echoButton.addEventListener("click", async () => {
-    echoButton.disabled = true;
-    echoResult.textContent = strings.echo.running;
-    try {
-      echoResult.textContent = await deps.onEchoTest();
-    } catch (err) {
-      const message =
-        err instanceof DOMException && err.name === "NotAllowedError"
-          ? strings.sttErrors["not-allowed"]!
-          : err instanceof Error
-            ? err.message
-            : String(err);
-      echoResult.textContent = strings.echo.failed(message);
-    } finally {
-      echoButton.disabled = false;
-    }
-  });
+  const echoTest = deps.onEchoTest;
+  if (!echoTest || !echoButton || !echoResult) {
+    echoButton?.remove();
+  } else {
+    echoButton.addEventListener("click", async () => {
+      echoButton.disabled = true;
+      echoResult.textContent = strings.echo.running;
+      try {
+        echoResult.textContent = await echoTest();
+      } catch (err) {
+        const message =
+          err instanceof DOMException && err.name === "NotAllowedError"
+            ? strings.sttErrors["not-allowed"]!
+            : err instanceof Error
+              ? err.message
+              : String(err);
+        echoResult.textContent = strings.echo.failed(message);
+      } finally {
+        echoButton.disabled = false;
+      }
+    });
+  }
 
   const refresh = () => {
     renderEngines();
