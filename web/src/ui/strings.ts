@@ -94,7 +94,7 @@ export const strings = {
       fi: "Tämä on kaikutesti. Puhun nyt muutaman sekunnin ajan, jotta voidaan mitata, kuinka paljon ääneni kuuluu kaiuttimista takaisin mikrofoniin. Pysy hetki hiljaa, testi on kohta valmis.",
       en: "This is an echo test. I will talk for a few seconds so we can measure how much of my voice travels from the speakers back into the microphone. Please stay quiet, it is almost done.",
     } satisfies Record<Lang, string>,
-    running: "Kaikutesti käynnissä. Ole hiljaa noin 15 sekuntia, avatar puhuu näytteen kahdesti.",
+    running: "Kaikutesti käynnissä. Ole hiljaa noin 25 sekuntia, avatar puhuu näytteen kolmesti.",
     failed: (message: string) => `Kaikutesti epäonnistui: ${message}`,
     describe: (r: EchoTestResult, engine: TtsEngineId): string => {
       const on = r.aecOn.leakDb;

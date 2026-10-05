@@ -9,6 +9,9 @@
     "dev:server": "tsx watch --env-file-if-exists=.env server/index.ts",
     "dev:web": "vite --config web/vite.config.ts",
     "whisper": "node --env-file-if-exists=.env scripts/whisper.mjs",
+    "widget": "npm run widget:build && concurrently --kill-others-on-fail -n server,web,stt,app -c blue,green,magenta,yellow \"npm:dev:server\" \"npm:dev:web\" \"npm:whisper\" \"npm:widget:app\"",
+    "widget:build": "esbuild desktop/main.ts --bundle --platform=node --format=cjs --external:electron --outfile=desktop/dist/main.cjs",
+    "widget:app": "electron desktop/dist/main.cjs",
     "typecheck": "tsc -p tsconfig.json && tsc -p web/tsconfig.json",
     "test": "tsx --test \"server/**/*.test.ts\""
   },
@@ -28,6 +31,8 @@
     "@types/node": "^26.6.4",
     "@types/three": "^0.186.0",
     "concurrently": "^10.0.5",
+    "electron": "^44.5.1",
+    "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.2"

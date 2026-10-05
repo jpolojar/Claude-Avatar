@@ -167,7 +167,10 @@ The server uses Claude's server-side fallbacks (`fallbacks: "default"`): if the 
 ```
 npm run typecheck   # TypeScript checks for the server and the web app
 npm test            # unit tests
+npm run widget      # work in progress: the app in an Electron desktop window
 ```
+
+`npm run widget` starts the same servers as `npm run dev` plus an Electron window (`desktop/main.ts`), so stop a running `npm run dev` first. It is the first step toward a desktop widget; push-to-talk does not work there yet (Electron has no Web Speech), use always-on listening or type.
 
 Layout:
 

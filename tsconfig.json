@@ -12,5 +12,6 @@
     "verbatimModuleSyntax": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["server", "shared", "web/vite.config.ts"]
+  "include": ["server", "shared", "desktop", "web/vite.config.ts"],
+  "exclude": ["desktop/dist"]
 }

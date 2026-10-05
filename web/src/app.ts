@@ -292,6 +292,7 @@ export class App {
             showTimings();
           }
           if (emotion) this.view.setEmotion(emotion);
+          this.listener?.setUnprotectedEcho(clip.engine === "browser");
           if (this.current === controller) this.setState("speaking");
           this.view.setSpeaking(clip.engine);
         },
@@ -420,6 +421,7 @@ export class App {
       return;
     }
     if (controller.signal.aborted) return;
+    this.listener?.setUnprotectedEcho(clip.engine === "browser");
     if (this.current === controller) this.setState("speaking");
     this.view.setSpeaking(clip.engine);
     try {

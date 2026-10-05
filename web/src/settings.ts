@@ -59,8 +59,13 @@ export function voiceOptions(engine: TtsEngineId, lang: Lang): { id: string; lab
   return serverVoices.filter((v) => v.engine === engine && v.lang === lang).map(({ id, label }) => ({ id, label }));
 }
 
+// Used until the server's voice list has loaded, so a page that started before
+// the server does not fall back to the browser voice (which no echo canceller removes).
+const DEFAULT_EDGE_VOICES: Record<Lang, string> = { fi: "fi-FI-NooraNeural", en: "en-US-AvaNeural" };
+
 /** The stored voice if still offered, otherwise the default (first) one. */
 export function resolveVoice(settings: Settings, engine: TtsEngineId, lang: Lang): string | null {
+  if (engine === "edge" && serverVoices.length === 0) return settings.voices[`edge:${lang}`] ?? DEFAULT_EDGE_VOICES[lang];
   const options = voiceOptions(engine, lang);
   const chosen = settings.voices[`${engine}:${lang}`];
   return options.find((o) => o.id === chosen)?.id ?? options[0]?.id ?? null;

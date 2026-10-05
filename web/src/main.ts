@@ -238,7 +238,11 @@ void fetchHealth().then((health) => {
   }
 });
 
-void Promise.all([fetchVoices(), waitForBrowserVoices()]).then(([voices]) => {
+// The server may still be starting; keep asking until its voices arrive.
+const loadVoices = async () => {
+  const [voices] = await Promise.all([fetchVoices(), waitForBrowserVoices()]);
   setServerVoices(voices);
   settingsPanel.refresh();
-});
+  if (voices.length === 0) setTimeout(loadVoices, 3000);
+};
+void loadVoices();

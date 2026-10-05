@@ -55,6 +55,13 @@ async function measure(echoCancellation: boolean, play: (signal: AbortSignal) =>
 
   try {
     const silence = await averagePower(analyser, SILENCE_MS);
+    if (echoCancellation) {
+      // In real use the mic stays open and the echo canceller has already
+      // learned the room; on a fresh stream the first seconds still leak.
+      // Train it with one unmeasured play so the result shows the steady state.
+      await play(new AbortController().signal);
+      await sleep(400);
+    }
     const stop = new AbortController();
     const playing = play(stop.signal);
     await sleep(CONVERGE_MS);

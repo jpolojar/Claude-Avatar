@@ -18,9 +18,29 @@ const NORMAL: Thresholds = { positiveSpeechThreshold: 0.5, negativeSpeechThresho
 // While the avatar talks, demand clearer and longer speech before barging in,
 // in case some of its voice still leaks through the echo canceller.
 const WHILE_AVATAR_SPEAKS: Thresholds = { positiveSpeechThreshold: 0.75, negativeSpeechThreshold: 0.5, minSpeechMs: 400 };
+// The echo canceller needs a few seconds of the avatar's voice to learn the
+// room after the mic opens (measured in Electron: +20 dB of echo on the first
+// sentence, below the room noise from the second). Until then, only clear,
+// sustained speech may interrupt.
+const WARMING_UP: Thresholds = { positiveSpeechThreshold: 0.88, negativeSpeechThreshold: 0.6, minSpeechMs: 650 };
+const WARM_UP_MS = 8000;
+// The browser's own voice bypasses Web Audio, so no echo canceller removes it:
+// while it speaks, the mic must not interrupt at all (use the key instead).
+const DEAF: Thresholds = { positiveSpeechThreshold: 0.999, negativeSpeechThreshold: 0.9, minSpeechMs: 60_000 };
 
 export class VadListener {
   private vad: MicVAD | null = null;
+  /** How long the avatar has spoken since the mic opened (echo canceller training time). */
+  private avatarSpokeMs = 0;
+  private speakingSince: number | null = null;
+  private warmUpTimer: ReturnType<typeof setTimeout> | undefined;
+  private unprotectedEcho = false;
+
+  /** The voice now playing cannot be echo-cancelled (browser speechSynthesis). */
+  setUnprotectedEcho(unprotected: boolean): void {
+    this.unprotectedEcho = unprotected;
+    if (unprotected && this.speakingSince !== null) this.vad?.setOptions(DEAF);
+  }
 
   constructor(private readonly handlers: VadHandlers) {}
 
@@ -47,10 +67,33 @@ export class VadListener {
   }
 
   setAvatarSpeaking(speaking: boolean): void {
-    this.vad?.setOptions(speaking ? WHILE_AVATAR_SPEAKS : NORMAL);
+    const now = performance.now();
+    clearTimeout(this.warmUpTimer);
+    if (speaking) {
+      this.speakingSince ??= now;
+    } else if (this.speakingSince !== null) {
+      this.avatarSpokeMs += now - this.speakingSince;
+      this.speakingSince = null;
+    }
+    if (!speaking) {
+      this.vad?.setOptions(NORMAL);
+      return;
+    }
+    if (this.unprotectedEcho) {
+      this.vad?.setOptions(DEAF);
+      return;
+    }
+    const left = WARM_UP_MS - (this.avatarSpokeMs + (now - this.speakingSince!));
+    if (left > 0) {
+      this.vad?.setOptions(WARMING_UP);
+      this.warmUpTimer = setTimeout(() => this.vad?.setOptions(WHILE_AVATAR_SPEAKS), left);
+    } else {
+      this.vad?.setOptions(WHILE_AVATAR_SPEAKS);
+    }
   }
 
   async stop(): Promise<void> {
+    clearTimeout(this.warmUpTimer);
     const vad = this.vad;
     this.vad = null;
     await vad?.destroy();
