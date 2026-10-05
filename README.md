@@ -2,7 +2,7 @@
 
 # Claude Avatar
 
-A talking 3D avatar in the browser that you chat with by voice, in Finnish or English. Claude (Opus 5.5) is the brain; everything else (speech recognition, speech synthesis, the 3D avatar) is free. The API key stays on a small Node server and never reaches the browser.
+A talking 3D avatar that you chat with by voice, in Finnish or English, in the browser or as a desktop widget. Claude (Opus 5.5) is the brain; everything else (speech recognition, speech synthesis, the 3D avatar) is free. The API key stays on a small Node server and never reaches the browser.
 
 The user interface and the avatar's persona are in Finnish; the avatar speaks both Finnish and English and switches when asked.
 
@@ -15,6 +15,7 @@ The user interface and the avatar's persona are in Finnish; the avatar speaks bo
 - **Web search:** current information such as weather or news through Claude's web search tool.
 - **Memory:** the avatar remembers you between conversations.
 - **Interruptions:** Claude learns exactly how far you listened before cutting it off, down to the word, and does not repeat itself.
+- **Desktop widget (Windows):** just the avatar on your desktop, with a push-to-talk key that works from any program, a tray icon and a settings window; installable with a setup program.
 
 ## Requirements
 
@@ -140,6 +141,32 @@ Tuning lives in `web/src/stt/vad-listener.ts`:
 - **End of speech:** 0.8 s of silence ends your turn.
 - **While the avatar speaks:** interrupting needs clearer speech (threshold 0.75) for at least 0.4 s, so leftover echo cannot interrupt the avatar.
 
+## Desktop widget (Windows)
+
+The widget is a transparent, frameless window that shows only the avatar and a speech bubble.
+
+### Installing
+
+1. Build the installer (or use one built earlier):
+   ```
+   npm run dist
+   ```
+2. Run `release\Avatar Setup 0.1.0.exe`. It is not code-signed, so Windows SmartScreen warns about it: choose *More info → Run anyway*. The installer adds Start menu and desktop shortcuts named *Avatar* (replacing an `Avatar.lnk` made by `create-shortcut.ps1`).
+3. On the first start the settings window asks for the **Claude API key**. It is checked with Claude and stored encrypted with Windows DPAPI (Electron `safeStorage`) in `%APPDATA%\Avatar\api-key.bin`; the pages never see it.
+4. Under *Puheentunnistus*, choose the folder that holds whisper.cpp and its model (see [Whisper](#whisper-always-on-listening); the folder with `ggml-*.bin` and `bin\Release\whisper-server.exe`). Whisper is not bundled because of its size. If a Whisper server is already running on port 8178 (e.g. `npm run dev`), the app uses it.
+5. Optional: *Käynnistä Windowsin mukana* starts the widget when you sign in.
+
+The installed app needs neither Node.js nor `.env`: it runs the server inside the app on `127.0.0.1:47821` and serves the built pages itself. Memory and settings live in `%APPDATA%\Avatar` (uninstalling keeps them).
+
+### Using the widget
+
+- It needs local Whisper (Electron has no Web Speech). By default it listens all the time.
+- **Push-to-talk works from any program:** hold **Ctrl+Space**, talk, and let go. Holding the key also interrupts the avatar. The key is caught globally with Electron's `globalShortcut` (which keeps it from the program in focus) and its release with [uiohook-napi](https://github.com/SnosMe/uiohook-napi). Without uiohook the key toggles instead (press to talk, press again to send). Change the key in the settings window, or with `AVATAR_PTT_KEY` (an [Electron accelerator](https://www.electronjs.org/docs/latest/api/accelerator), e.g. `Alt+Q`; it overrides the settings window).
+- The tray icon shows and hides the avatar (left click). Its menu (right click) has the microphone options: continuous listening on or off (push-to-talk only), and mute, which turns the microphone off entirely, the key included.
+- Drag the avatar to move it; clicks on empty areas go through to the desktop. Scroll the mouse wheel over the avatar to resize it, or choose a size from the menu. The position, size and microphone options are remembered.
+- Click the avatar to interrupt it; right-click for the menu (stop, new conversation, microphone, language, size, always on top, settings, dev tools, quit).
+- **Settings window** (double-click the avatar, or *Asetukset…* in either menu): language, microphone, push-to-talk key, size, always on top, speech bubble, voice, memory, and the conversation so far with a *new conversation* button. Voice settings are shared with the widget through `localStorage`; the widget options are kept by the main process in `widget-state.json`.
+
 ## Configuration (`.env`)
 
 | Variable | Default | Description |
@@ -165,29 +192,22 @@ The server uses Claude's server-side fallbacks (`fallbacks: "default"`): if the 
 ## Development
 
 ```
-npm run typecheck   # TypeScript checks for the server and the web app
-npm test            # unit tests
-npm run widget      # work in progress: the desktop widget (Electron)
+npm run typecheck        # TypeScript checks for the server, the web app and the desktop app
+npm test                 # unit tests
+npm run widget           # the desktop widget with the dev servers (stop npm run dev first)
+npm run widget:internal  # the widget running its own server on the built pages, as installed
+npm run dist             # the Windows installer in release/
 ```
 
-`npm run widget` starts the same servers as `npm run dev` plus the desktop widget (`desktop/main.ts`, `web/widget.html`), so stop a running `npm run dev` first. The widget is a transparent, frameless window that shows only the avatar and a speech bubble:
+`npm run widget` runs the dev servers (`npm run dev`) and the widget, which loads its pages from Vite and reads `.env` like the browser version. `AVATAR_DESKTOP_MODE=window` opens the full web app in an Electron window instead.
 
-- It needs local Whisper (Electron has no Web Speech). By default it listens all the time.
-- **Push-to-talk works from any program:** hold **Ctrl+Space**, talk, and let go. Holding the key also interrupts the avatar. The key is caught globally with Electron's `globalShortcut` (which keeps it from the program in focus) and its release with [uiohook-napi](https://github.com/SnosMe/uiohook-napi). Without uiohook the key toggles instead (press to talk, press again to send). Change the key in the settings window, or with `AVATAR_PTT_KEY` (an [Electron accelerator](https://www.electronjs.org/docs/latest/api/accelerator), e.g. `Alt+Q`; it overrides the settings window).
-- The tray icon shows and hides the avatar (left click). Its menu (right click) has the microphone options: continuous listening on or off (push-to-talk only), and mute, which turns the microphone off entirely, the key included.
-- Drag the avatar to move it; clicks on empty areas go through to the desktop. Scroll the mouse wheel over the avatar to resize it, or choose a size from the menu. The position, size and microphone options are remembered.
-- Click the avatar to interrupt it; right-click for the menu (stop, new conversation, microphone, language, size, always on top, settings, dev tools, quit).
-- **Settings window** (double-click the avatar, or *Asetukset…* in either menu): language, microphone, push-to-talk key, size, always on top, speech bubble, voice, memory, and the conversation so far with a *new conversation* button. Voice settings are shared with the widget through `localStorage`; the widget options are kept by the main process in `widget-state.json` in Electron's user data folder.
-- `AVATAR_DESKTOP_MODE=window` opens the full web app in a normal Electron window instead.
-
-This is work in progress (the installer comes next).
 
 Layout:
 
-- `server/`: the Express server. `claude.ts` streams from Claude (with web search), `sentences.ts` splits the reply into sentences, `markers.ts` handles the language and emotion markers, `session.ts` keeps the conversation and interruptions, `memory.ts` the long-term memory, `stt.ts` talks to Whisper, `tts/` holds the speech engines (Edge, Piper), and `persona.md` is the avatar's persona (in Finnish).
+- `server/`: the Express server. `app.ts` is the HTTP API (`index.ts` starts it for development), `claude.ts` streams from Claude (with web search), `sentences.ts` splits the reply into sentences, `markers.ts` handles the language and emotion markers, `session.ts` keeps the conversation and interruptions, `memory.ts` the long-term memory, `stt.ts` talks to Whisper, `tts/` holds the speech engines (Edge, Piper), and `persona.md` is the avatar's persona (in Finnish).
 - `scripts/`: `whisper.mjs` starts whisper.cpp as part of `npm run dev`; `start-avatar.ps1` and `create-shortcut.ps1` are the Windows launcher.
 - `web/`: the Vite + TypeScript web app. `app.ts` is the state machine and conversation flow, `stt/` speech recognition (Web Speech, VAD + Whisper, Whisper push-to-talk), `tts/` the speech engines, fallback and sentence queue, `audio/` the Web Audio graph, lip sync and echo test, `avatar/` the 3D avatar and its motion, and `ui/` the views and (Finnish) UI strings. In dev mode the avatar is available in the console as `avatar`, e.g. `avatar.setState("thinking")`.
-- `desktop/`: the Electron widget: `main.ts` (windows, tray, menus, options), `hotkey.ts` (global push-to-talk) and `preload.ts` (the bridge to the pages, typed in `shared/desktop.ts`); `web/widget.html` + `web/src/widget/` is the widget page and `web/settings.html` + `web/src/settings-window/` the settings window.
+- `desktop/`: the Electron widget: `main.ts` (windows, tray, menus, options), `hotkey.ts` (global push-to-talk), `runtime.ts` (the installed app's own server and Whisper, `secrets.ts` the encrypted API key, `whisper.ts` finds and starts whisper.cpp) and `preload.ts` (the bridge to the pages, typed in `shared/desktop.ts`); `web/widget.html` + `web/src/widget/` is the widget page and `web/settings.html` + `web/src/settings-window/` the settings window.
 - `shared/protocol.ts`: the wire format shared by the server and the browser (NDJSON).
 
 ## Credits

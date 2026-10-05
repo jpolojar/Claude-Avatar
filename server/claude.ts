@@ -13,6 +13,22 @@ type ToolUnion = Anthropic.Beta.Messages.BetaToolUnion;
 let client: Anthropic | null = null;
 export const getClient = () => (client ??= new Anthropic());
 
+/** The API key changed (the desktop app's settings window): build a new client on next use. */
+export function resetClient(): void {
+  client = null;
+}
+
+/** Checks a key with a free request (lists one model). */
+export async function checkApiKey(apiKey: string): Promise<boolean> {
+  try {
+    await new Anthropic({ apiKey }).models.list({ limit: 1 });
+    return true;
+  } catch (err) {
+    if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) return false;
+    throw err;
+  }
+}
+
 /** A long server-tool turn (several searches) may pause; continue it this many times at most. */
 const MAX_CONTINUATIONS = 3;
 

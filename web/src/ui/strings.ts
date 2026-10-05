@@ -43,6 +43,25 @@ export const strings = {
     hotkeyUnsupported: "Tätä näppäintä ei voi käyttää. Valitse kirjain, numero, välilyönti tai F-näppäin.",
     hotkeyNeedsModifier: "Lisää Ctrl, Alt tai Shift, ettei näppäin laukea kirjoittaessa.",
     historyEmpty: "Ei vielä keskustelua.",
+    keyMissing: "Avainta ei ole vielä tallennettu. Luo avain osoitteessa console.anthropic.com.",
+    keyStored: "Avain on tallennettu salattuna tälle tietokoneelle. Uusi avain korvaa sen.",
+    keyChecking: "Tarkistetaan avainta…",
+    keySaved: "Avain toimii ja on tallennettu.",
+    keyErrors: {
+      invalid: "Tämä ei näytä API-avaimelta (alkaa sk-ant-).",
+      rejected: "Claude ei hyväksynyt avainta. Tarkista, että kopioit sen kokonaan.",
+      network: "Avainta ei voitu tarkistaa: ei yhteyttä Clauden palveluun.",
+      storage: "Avaimen salattu tallennus ei onnistunut tällä koneella.",
+    },
+    whisperNone: "(ei valittu)",
+    whisper: {
+      running: "Käynnissä.",
+      starting: "Käynnistyy…",
+      missing:
+        "Kansiosta ei löytynyt whisper-server.exe-tiedostoa ja ggml-mallia. Katso README: Whisper (always-on listening).",
+      failed: "Whisper pysähtyi. Tarkista kansio tai käynnistä sovellus uudelleen.",
+      external: "Käytössä on jo käynnissä oleva Whisper (portti 8178).",
+    },
   },
   searching: (query: string) => (query ? `Hakee verkosta: ${query}` : "Hakee verkosta…"),
   searched: "(haki verkosta)",
@@ -80,7 +99,8 @@ export const strings = {
   noSpeech: "En kuullut mitään. Pidä välilyöntiä pohjassa koko puheen ajan.",
   noSpeechHotkey: "En kuullut mitään. Pidä pikanäppäintä pohjassa koko puheen ajan.",
   avatarMissing: "Avatar-mallia ei löytynyt. Tallenna VRM-malli nimellä web/public/models/avatar.vrm.",
-  missingKey: "API-avain puuttuu. Kopioi .env.example tiedostoksi .env, lisää avain ja käynnistä palvelin uudelleen.",
+  missingKey:
+    "API-avain puuttuu. Työpöytäsovelluksessa lisää se asetuksista; muuten kopioi .env.example tiedostoksi .env, lisää avain ja käynnistä palvelin uudelleen.",
   serverDown: "Palvelimeen ei saada yhteyttä. Onko npm run dev käynnissä?",
   sttUnsupported: "Tämä selain ei tue puheentunnistusta. Käytä Edgeä tai Chromea, tai kirjoita viesti.",
   sttErrors: {
@@ -93,7 +113,7 @@ export const strings = {
   } as Record<string, string>,
   sttErrorFallback: (code: string) => `Puheentunnistuksen virhe: ${code}`,
   chatErrors: {
-    auth: "API-avain puuttuu tai on virheellinen. Tarkista .env-tiedosto.",
+    auth: "API-avain puuttuu tai on virheellinen. Tarkista se asetuksista (työpöytäsovellus) tai .env-tiedostosta.",
     rate_limit: "Claude API:n käyttöraja tuli vastaan. Odota hetki ja yritä uudelleen.",
     overloaded: "Claude on juuri nyt ruuhkautunut. Yritä hetken päästä uudelleen.",
     network: "Yhteys Claude API:in katkesi.",

@@ -1,4 +1,4 @@
-import { createReadStream } from "node:fs";
+import { createReadStream, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 
@@ -9,7 +9,8 @@ const projectRoot = fileURLToPath(new URL("..", import.meta.url));
  * Serves the voice activity detector's model, audio worklet and ONNX runtime
  * straight from node_modules at /vad-assets/. They cannot live in public/:
  * onnxruntime loads its .mjs with a dynamic import, which Vite tags with
- * "?import" and refuses to serve from the public directory.
+ * "?import" and refuses to serve from the public directory. A build copies
+ * them to dist/web/vad-assets/ (the desktop app serves the build).
  */
 function vadAssets(): Plugin {
   const files: Record<string, string> = {
@@ -35,6 +36,11 @@ function vadAssets(): Plugin {
         res.setHeader("Content-Type", types[name.split(".").at(-1)!] ?? "application/octet-stream");
         createReadStream(`${projectRoot}/${file}`).on("error", next).pipe(res);
       });
+    },
+    generateBundle() {
+      for (const [name, file] of Object.entries(files)) {
+        this.emitFile({ type: "asset", fileName: `vad-assets/${name}`, source: readFileSync(`${projectRoot}/${file}`) });
+      }
     },
   };
 }

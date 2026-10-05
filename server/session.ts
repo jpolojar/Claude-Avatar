@@ -6,7 +6,11 @@ import { stripMarkers } from "./markers.js";
 
 type MessageParam = Anthropic.Beta.Messages.BetaMessageParam;
 
-const PERSONA = readFileSync(new URL("./persona.md", import.meta.url), "utf8").trim();
+// The desktop app bundles the server into one file and ships persona.md beside it.
+const PERSONA = readFileSync(
+  process.env.AVATAR_PERSONA_FILE || new URL("./persona.md", import.meta.url),
+  "utf8",
+).trim();
 
 const LANGUAGE_LINE: Record<Lang, string> = {
   fi: "Keskustelun kieli on aluksi suomi.",

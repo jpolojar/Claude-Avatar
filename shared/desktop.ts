@@ -35,6 +35,19 @@ export interface WidgetStatus extends WidgetOptions {
   hotkeyMode: "hold" | "toggle" | null;
 }
 
+/** The installed app's own setup (the development setup uses .env and npm scripts). */
+export interface AppSetup {
+  /** The app runs its own server: the API key, Whisper and autostart are set here. */
+  managed: boolean;
+  hasKey: boolean;
+  whisperDir: string | null;
+  whisper: "running" | "starting" | "missing" | "failed" | "external";
+  /** Start with Windows; null when unavailable (development). */
+  autostart: boolean | null;
+}
+
+export type ApiKeyResult = { ok: true } | { ok: false; reason: "invalid" | "rejected" | "network" | "storage" };
+
 export interface HistoryEntry {
   who: "user" | "avatar";
   text: string;
@@ -49,6 +62,7 @@ export type DesktopCommand =
   | { type: "say"; text: string }
   | { type: "options"; options: WidgetStatus }
   | { type: "history"; entries: HistoryEntry[] }
+  | { type: "setup"; setup: AppSetup }
   /** The global push-to-talk key went down or up. */
   | { type: "ptt"; down: boolean };
 
@@ -80,6 +94,12 @@ export interface DesktopBridge {
   setOptions(patch: Partial<WidgetOptions>): Promise<WidgetStatus>;
   getHistory(): Promise<HistoryEntry[]>;
   sendToWidget(command: WidgetCommand): void;
+  getSetup(): Promise<AppSetup>;
+  /** Checks the key with Claude and stores it encrypted; never read back by the pages. */
+  setApiKey(key: string): Promise<ApiKeyResult>;
+  /** Opens a folder picker for whisper.cpp and starts it from there. */
+  chooseWhisperDir(): Promise<AppSetup>;
+  setAutostart(on: boolean): Promise<AppSetup>;
 }
 
 export const IPC = {
@@ -95,5 +115,9 @@ export const IPC = {
   getHistory: "avatar:get-history",
   openSettings: "avatar:open-settings",
   sendToWidget: "avatar:send-to-widget",
+  getSetup: "avatar:get-setup",
+  setApiKey: "avatar:set-api-key",
+  chooseWhisperDir: "avatar:choose-whisper-dir",
+  setAutostart: "avatar:set-autostart",
   command: "avatar:command",
 } as const;

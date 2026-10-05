@@ -14,6 +14,32 @@
         Osa asetuksista toimii vain työpöytäwidgetissä (npm run widget).
       </div>
 
+      <details id="app-setup" class="settings" open hidden>
+        <summary>Sovellus</summary>
+        <div class="settings-grid">
+          <label for="api-key">API-avain</label>
+          <div class="stack">
+            <form id="api-key-form" class="row" autocomplete="off">
+              <input id="api-key" type="password" placeholder="sk-ant-…" spellcheck="false" />
+              <button id="api-key-save" type="submit">Tallenna</button>
+            </form>
+            <p id="api-key-note" class="hint"></p>
+          </div>
+
+          <span>Puheentunnistus</span>
+          <div class="stack">
+            <div class="row">
+              <code id="whisper-dir" class="path"></code>
+              <button id="whisper-choose" type="button" class="secondary">Valitse kansio…</button>
+            </div>
+            <p id="whisper-note" class="hint"></p>
+          </div>
+
+          <span>Käynnistys</span>
+          <label class="check"><input id="opt-autostart" type="checkbox" /> Käynnistä Windowsin mukana</label>
+        </div>
+      </details>
+
       <details class="settings" open>
         <summary>Yleiset</summary>
         <div class="settings-grid">

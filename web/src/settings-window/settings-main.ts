@@ -2,7 +2,7 @@
 // process), voice settings (localStorage, shared with the widget), memory and
 // the conversation so far. Opened from the tray, the avatar's menu or by
 // double-clicking the avatar.
-import type { HistoryEntry, WidgetOptions, WidgetStatus } from "../../../shared/desktop";
+import type { AppSetup, HistoryEntry, WidgetOptions, WidgetStatus } from "../../../shared/desktop";
 import type { Lang } from "../../../shared/protocol";
 import { createSettingsStore, keepLoadingVoices } from "../core";
 import { desktop } from "../desktop";
@@ -164,6 +164,66 @@ hotkeyChange.addEventListener("click", async () => {
   window.addEventListener("keydown", onCaptureKey, true);
 });
 
+// --- The installed app: API key, Whisper, autostart ------------------------------
+
+const setupSection = byId("app-setup");
+const keyForm = byId<HTMLFormElement>("api-key-form");
+const keyInput = byId<HTMLInputElement>("api-key");
+const keySave = byId<HTMLButtonElement>("api-key-save");
+const keyNote = byId("api-key-note");
+const whisperDir = byId("whisper-dir");
+const whisperNote = byId("whisper-note");
+const autostart = byId<HTMLInputElement>("opt-autostart");
+
+function setNote(el: HTMLElement, note: string, kind: "ok" | "error" | null = null): void {
+  el.textContent = note;
+  el.classList.toggle("ok", kind === "ok");
+  el.classList.toggle("error", kind === "error");
+}
+
+let keyBusy = false;
+
+function renderSetup(setup: AppSetup): void {
+  setupSection.hidden = !setup.managed;
+  if (!keyBusy) setNote(keyNote, setup.hasKey ? text.keyStored : text.keyMissing, setup.hasKey ? null : "error");
+  whisperDir.textContent = setup.whisperDir ?? text.whisperNone;
+  whisperDir.title = setup.whisperDir ?? "";
+  setNote(
+    whisperNote,
+    text.whisper[setup.whisper],
+    setup.whisper === "running" || setup.whisper === "external" ? "ok" : setup.whisper === "starting" ? null : "error",
+  );
+  autostart.checked = setup.autostart === true;
+  autostart.disabled = setup.autostart === null;
+}
+
+keyForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!desktop || !keyInput.value.trim()) return;
+  keyBusy = true;
+  keySave.disabled = true;
+  setNote(keyNote, text.keyChecking);
+  try {
+    const result = await desktop.setApiKey(keyInput.value);
+    if (result.ok) {
+      keyInput.value = "";
+      setNote(keyNote, text.keySaved, "ok");
+    } else {
+      setNote(keyNote, text.keyErrors[result.reason], "error");
+    }
+  } finally {
+    keyBusy = false;
+    keySave.disabled = false;
+  }
+});
+
+byId("whisper-choose").addEventListener("click", async () => {
+  if (desktop) renderSetup(await desktop.chooseWhisperDir());
+});
+autostart.addEventListener("change", async () => {
+  if (desktop) renderSetup(await desktop.setAutostart(autostart.checked));
+});
+
 // --- Conversation ------------------------------------------------------------------
 
 const historyEl = byId("history");
@@ -202,7 +262,9 @@ if (desktop) {
   desktop.onCommand((command) => {
     if (command.type === "options") render(command.options);
     else if (command.type === "history") renderHistory(command.entries);
+    else if (command.type === "setup") renderSetup(command.setup);
   });
+  void desktop.getSetup().then(renderSetup);
   void desktop.getOptions().then(render);
   void desktop.getHistory().then(renderHistory);
 } else {

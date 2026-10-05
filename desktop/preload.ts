@@ -1,6 +1,14 @@
 // Exposes the desktop bridge to the app's pages (sandboxed, context-isolated).
 import { contextBridge, ipcRenderer } from "electron";
-import { IPC, type DesktopBridge, type DesktopCommand, type HistoryEntry, type WidgetStatus } from "../shared/desktop.js";
+import {
+  IPC,
+  type ApiKeyResult,
+  type AppSetup,
+  type DesktopBridge,
+  type DesktopCommand,
+  type HistoryEntry,
+  type WidgetStatus,
+} from "../shared/desktop.js";
 
 const bridge: DesktopBridge = {
   setInteractive: (interactive) => ipcRenderer.send(IPC.setInteractive, interactive),
@@ -18,6 +26,10 @@ const bridge: DesktopBridge = {
   setOptions: (patch) => ipcRenderer.invoke(IPC.setOptions, patch) as Promise<WidgetStatus>,
   getHistory: () => ipcRenderer.invoke(IPC.getHistory) as Promise<HistoryEntry[]>,
   sendToWidget: (command) => ipcRenderer.send(IPC.sendToWidget, command),
+  getSetup: () => ipcRenderer.invoke(IPC.getSetup) as Promise<AppSetup>,
+  setApiKey: (key) => ipcRenderer.invoke(IPC.setApiKey, key) as Promise<ApiKeyResult>,
+  chooseWhisperDir: () => ipcRenderer.invoke(IPC.chooseWhisperDir) as Promise<AppSetup>,
+  setAutostart: (on) => ipcRenderer.invoke(IPC.setAutostart, on) as Promise<AppSetup>,
 };
 
 contextBridge.exposeInMainWorld("avatarDesktop", bridge);

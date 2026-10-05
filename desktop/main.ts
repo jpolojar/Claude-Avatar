@@ -1,9 +1,10 @@
 // Electron shell for the avatar: a transparent, frameless desktop widget that
 // shows only the character and a speech bubble, a tray icon, a settings
-// window and the global push-to-talk key. The server, Vite and Whisper run
-// beside it (npm run widget). AVATAR_DESKTOP_MODE=window opens the full web
-// app in a normal window instead.
-import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen, session } from "electron";
+// window and the global push-to-talk key. Installed, the app runs the server
+// and Whisper itself (runtime.ts); in development (npm run widget) they run
+// beside it. AVATAR_DESKTOP_MODE=window opens the full web app in a normal
+// window instead.
+import { BrowserWindow, Menu, Tray, app, dialog, ipcMain, nativeImage, screen, session } from "electron";
 import type { MenuItemConstructorOptions } from "electron";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -20,13 +21,16 @@ import {
   type WidgetStatus,
 } from "../shared/desktop.js";
 import { onPushToTalk, setPushToTalk, stopPushToTalk, type PushToTalk } from "./hotkey.js";
+import { Runtime } from "./runtime.js";
 
-const APP_URL = process.env.AVATAR_WIDGET_URL || "http://localhost:5173";
 const MODE = (process.env.AVATAR_DESKTOP_MODE || "widget").toLowerCase();
 const RETRY_MS = 500;
 const DEFAULT_HOTKEY = "Control+Space";
 // desktop/dist/main.cjs -> the project root.
 const ICON = join(__dirname, "..", "..", "assets", "avatar.ico");
+
+/** The server (ours when installed, the dev servers otherwise), Whisper and the API key. */
+const runtime = new Runtime();
 
 // Chrome cancels the echo of everything the browser plays (not only WebRTC
 // audio) behind these features; Electron does not get Chrome's field trials,
@@ -144,9 +148,9 @@ function loadWhenReady(win: BrowserWindow, page: string): void {
   win.webContents.on("did-finish-load", () => win.webContents.setZoomFactor(1));
   const load = async () => {
     try {
-      const res = await fetch(`${APP_URL}/api/health`);
+      const res = await fetch(`${runtime.url}/api/health`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      await win.loadURL(`${APP_URL}/${page}`);
+      await win.loadURL(`${runtime.url}/${page}`);
     } catch {
       if (!win.isDestroyed()) setTimeout(load, RETRY_MS);
     }
@@ -323,6 +327,28 @@ function createWidget(): void {
   };
   ipcMain.on(IPC.openSettings, openSettings);
 
+  // --- Setup of the installed app: API key, Whisper, autostart ---
+
+  ipcMain.handle(IPC.getSetup, () => runtime.setup());
+  ipcMain.handle(IPC.setApiKey, (_event, key: unknown) =>
+    typeof key === "string" ? runtime.setApiKey(key) : { ok: false, reason: "invalid" },
+  );
+  ipcMain.handle(IPC.chooseWhisperDir, async () => {
+    const parent = settingsWin && !settingsWin.isDestroyed() ? settingsWin : win;
+    const result = await dialog.showOpenDialog(parent, {
+      title: "Valitse whisper.cpp-kansio",
+      properties: ["openDirectory"],
+      defaultPath: runtime.setup().whisperDir ?? undefined,
+    });
+    const dir = result.filePaths[0];
+    return result.canceled || !dir ? runtime.setup() : runtime.setWhisperDir(dir);
+  });
+  ipcMain.handle(IPC.setAutostart, (_event, on: unknown) => runtime.setAutostart(on === true));
+  runtime.onChange((setup) => toAll({ type: "setup", setup }));
+
+  // First run of the installed app: ask for the API key.
+  if (runtime.managed && !runtime.setup().hasKey) openSettings();
+
   // --- Menus (right-click on the avatar and the tray icon) ---
 
   let page: MenuState = { lang: "fi" };
@@ -401,6 +427,7 @@ function createWidget(): void {
   tray.on("right-click", () => tray.popUpContextMenu(buildMenu(true)));
   app.on("will-quit", () => {
     stopPushToTalk();
+    runtime.stop();
     tray.destroy();
   });
 }
@@ -410,10 +437,17 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on("second-instance", () => BrowserWindow.getAllWindows()[0]?.showInactive());
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     // The pages are our own local app: allow the microphone without a prompt.
     session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => callback(permission === "media"));
     session.defaultSession.setPermissionCheckHandler((_wc, permission) => permission === "media");
+    try {
+      await runtime.start();
+    } catch (err) {
+      dialog.showErrorBox("Avatar", `Palvelin ei käynnistynyt: ${err instanceof Error ? err.message : String(err)}`);
+      app.quit();
+      return;
+    }
     if (MODE === "window") createFullWindow();
     else createWidget();
   });
